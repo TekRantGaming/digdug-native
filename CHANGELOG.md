@@ -1,31 +1,14 @@
 # Changelog
 
-## 1.0.3
-
-- Added `--rom-status` (reports whether/where a ROM set was found; exit code 3 = none) and the menu now shows where the ROMs were loaded from; the startup details are written to `digdug.log`
-- CI now runs the packaged Windows exe and the AppImage on a clean machine and fails the build if they find a ROM set
-- ROM discovery narrowed to documented locations only (given path, remembered path, next to the program/AppImage, config folder); parent folders and the working directory are no longer searched
-
-## 1.0.2
-
-- Fixed drag-and-drop of the ROM zip: the start-up ROM prompt no longer uses a blocking dialog. An on-screen page (with a built-in font) is shown instead, the file picker runs on a background thread, and bad drops show an error on the page
-- Dropping loose ROM files from an extracted set now works (their folder is used)
-
-## 1.0.1
-
-- Added an AI disclosure (AI-DISCLOSURE.md, README banner)
-- Removed the roms/ placeholder folder from the repository so it can't be mistaken for game data
-- CI now fails if any ROM-like file is found in the repository, the Windows package or the AppImage
-
 ## 1.0.0
 
-First public release.
+Initial release.
 
-- Hardware-level emulation of the Dig Dug arcade board (3x Z80, 06xx/51xx/53xx I/O, video, 3-voice wavetable sound)
+- Hardware-level emulation of the Dig Dug arcade board (3x Z80, 06xx/51xx/53xx I/O, video, 3-voice wavetable sound); bring your own ROMs
 - SDL2 front end for Windows and Linux (self-contained `.exe` and AppImage)
 - Game controller support (Xbox, PlayStation 4/5, Switch Pro, generic gamepads) with hot-plugging
 - In-game menu: fullscreen, window size, scaling, filter, volume, audio device picker, lives, bonus, rank, auto coin, auto pump, widescreen
 - Widescreen fill for 16:9 and wider screens with a frame marking the real playfield
-- Auto pump and auto coin conveniences
-- Persistent settings and high scores; ROM discovery with file picker and drag-and-drop
+- ROM discovery with an on-screen drop page, file picker and drag-and-drop; `--rom-status` diagnostic
+- Build checks that fail if any ROM-like file is found in the repository or in a release package, and a clean-machine test of the packaged exe and AppImage
 - Developer tools: Z80 disassembler, headless runner, tracing, test bot
