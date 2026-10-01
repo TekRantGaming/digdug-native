@@ -16,6 +16,8 @@ namespace DigDug
         public int Bonus = 4;            // value of DIP byte 0 bits 3-5 (see BonusNames)
         public int Rank;                 // 0..3 = A..D
         public string RomPath = "";
+        public string AudioDevice = "";  // empty = system default
+        public bool AutoCoin = true;     // pressing Start with no credit inserts one automatically
 
         public static readonly int[] BonusValues = { 4, 2, 6, 1, 0 };
         public static readonly string[] BonusNames = { "10000 40000", "10000 50000", "20000 60000", "20000 70000", "NONE" };
@@ -56,6 +58,8 @@ namespace DigDug
                         case "bonus": if (Array.IndexOf(BonusValues, n) >= 0) s.Bonus = n; break;
                         case "rank": s.Rank = Math.Max(0, Math.Min(3, n)); break;
                         case "rom_path": s.RomPath = v; break;
+                        case "audio_device": s.AudioDevice = v; break;
+                        case "auto_coin": s.AutoCoin = n != 0; break;
                     }
                 }
             }
@@ -70,7 +74,7 @@ namespace DigDug
                 var l = new List<string>
                 {
                     "fullscreen=" + (Fullscreen ? 1 : 0), "window_scale=" + WindowScale, "integer_scale=" + (IntegerScale ? 1 : 0),
-                    "smooth=" + (Smooth ? 1 : 0), "volume=" + Volume, "lives=" + Lives, "bonus=" + Bonus, "rank=" + Rank, "rom_path=" + RomPath
+                    "smooth=" + (Smooth ? 1 : 0), "volume=" + Volume, "lives=" + Lives, "bonus=" + Bonus, "rank=" + Rank, "rom_path=" + RomPath, "audio_device=" + AudioDevice, "auto_coin=" + (AutoCoin ? 1 : 0)
                 };
                 File.WriteAllLines(FilePath, l.ToArray());
             }

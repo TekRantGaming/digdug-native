@@ -14,7 +14,7 @@ native game-controller support.
 * **Controllers**: Xbox 360 / One / Series, PlayStation 4 (DualShock 4) and PlayStation 5 (DualSense), Switch Pro,
   and most other gamepads, with hot-plugging – via SDL's game-controller database
 * **In-game menu** (Esc, or the PS / Guide button): fullscreen, window size, sharp or smooth scaling, volume,
-  lives, bonus-life thresholds, difficulty rank, reset
+  **audio output device picker + test sound**, lives, bonus-life thresholds, difficulty rank, auto-coin, reset
 * Windows `.exe` and Linux **AppImage**; fast-forward (hold Tab); pause; persistent settings and high scores
 * The ~30-second power-on self-test is fast-forwarded automatically
 
@@ -24,7 +24,7 @@ native game-controller support.
 |---|---|---|
 | Move | Arrow keys / WASD | D-pad or left stick |
 | Pump (fire) | Space / Ctrl / Z / X | A, B, X, Y, R1 or either trigger |
-| Insert coin | 5 / C | Back / Select / Share |
+| Insert coin | 5 / C | Back / Select / Share (or just press Start: *Auto coin* is on by default) |
 | 1 player start | 1 / Enter | Start / Options |
 | 2 player start | 2 | L1 |
 | Menu | Esc / F1 | PS / Guide button, or press the right stick |
@@ -65,6 +65,11 @@ dotnet run -- --roms path/to/digdug.zip
 ```
 
 On Linux: `chmod +x DigDug-x86_64.AppImage` and run it. Controller access follows your distro's normal udev rules.
+
+## No sound?
+
+Open the menu (Esc) -> Options -> **AUDIO** and use Left/Right to pick your output device; a short test tone plays each time you change it.
+Some systems with virtual mixers (e.g. SteelSeries Sonar) route new programs to a channel you can't hear. digdug.log lists every device SDL sees.
 
 ## Command line
 

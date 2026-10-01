@@ -46,6 +46,8 @@ namespace DigDug
         public const int WindowPosCentered = 0x2FFF0000;
 
         public const uint EvQuit = 0x100, EvWindow = 0x200, EvKeyDown = 0x300, EvKeyUp = 0x301;
+        public const uint EvMouseButtonDown = 0x401;
+        public const uint EvControllerAxis = 0x650, EvControllerButtonUp = 0x652;
         public const uint EvControllerButtonDown = 0x651, EvControllerDeviceAdded = 0x653, EvControllerDeviceRemoved = 0x654;
         public const uint EvDropFile = 0x1000;
 
@@ -100,6 +102,12 @@ namespace DigDug
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr SDL_GameControllerGetJoystick(IntPtr pad);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern int SDL_JoystickInstanceID(IntPtr joy);
 
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr SDL_GetCurrentAudioDriver();
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_EventState(uint type, int state);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_GetNumAudioDevices(int capture);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr SDL_GetAudioDeviceName(int index, int capture);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_PushEvent(IntPtr ev);
+        public static string AudioDriver() { return Marshal.PtrToStringUTF8(SDL_GetCurrentAudioDriver()) ?? "?"; }
         public static string Error() { return Marshal.PtrToStringUTF8(SDL_GetError()) ?? ""; }
         public static string ControllerName(IntPtr pad) { return Marshal.PtrToStringUTF8(SDL_GameControllerName(pad)) ?? "Controller"; }
         public static int InstanceId(IntPtr pad) { return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)); }

@@ -23,7 +23,9 @@ namespace DigDug
         IntPtr win, ren, tex, ev;
         uint audio;
         byte* keys;
-        readonly List<IntPtr> pads = new List<IntPtr>();
+        // Controller state is tracked from SDL's button/axis *events* (the same path the menu uses), not by polling.
+        sealed class Pad { public IntPtr Handle; public int Id; public readonly bool[] Btn = new bool[16]; public readonly short[] Axis = new short[6]; }
+        readonly List<Pad> pads = new List<Pad>();
         readonly Stopwatch sw = Stopwatch.StartNew();
         bool running = true, paused, menuOpen, menuPausesGame;
 
@@ -39,10 +41,11 @@ namespace DigDug
         short[] abuf = new short[1600];
         double sampleAcc;
 
+        public readonly List<string[]> Script = new List<string[]>();
         public App(Settings s) { cfg = s; try { File.WriteAllText(Path.Combine(Settings.ConfigDir, "digdug.log"), "Dig Dug log " + DateTime.Now + "\n"); } catch { } }
 
         static void Log(string s) { try { File.AppendAllText(Path.Combine(Settings.ConfigDir, "digdug.log"), s + "\n"); } catch { } }
-        double lastLog;
+        double lastLog; int peak;
 
         // ================================================================== startup
         public int Run(RomSet roms, Dictionary<string, string> opts)
@@ -55,6 +58,7 @@ namespace DigDug
                 return 1;
             }
             ev = Marshal.AllocHGlobal(64);
+            ConfigureShot(opts);
 
             int sw0 = W * 3, sh0 = H * 3;
             SdlRect ub;
@@ -70,6 +74,7 @@ namespace DigDug
             if (ren == IntPtr.Zero) { Console.Error.WriteLine("Renderer failed: " + Sdl.Error()); return 1; }
             MakeTexture();
             Sdl.SDL_ShowCursor(cfg.Fullscreen ? 0 : 1);
+            Sdl.SDL_EventState(Sdl.EvDropFile, 1);
 
             OpenAudio();
             for (int i = 0; i < Sdl.SDL_NumJoysticks(); i++) OpenPad(i);
@@ -78,18 +83,21 @@ namespace DigDug
             else
             {
                 string msg = "Dig Dug needs its original ROM files, which are not included with this program.\n\n" +
-                    "Drag your digdug.zip (or the folder containing the ROM files) onto the game window,\n" +
-                    "or place it in:\n  " + Path.Combine(Settings.ConfigDir, "roms") + "\n\n" +
-                    "You can also start the program as:  DigDug <path-to-digdug.zip>";
-                Sdl.SDL_ShowSimpleMessageBox(0x20, "Dig Dug - ROMs required", msg, win);
-                Sdl.SDL_SetWindowTitle(win, "Dig Dug - drop your digdug.zip onto this window");
+                    "After you press OK a file dialog opens: choose your digdug.zip.\n" +
+                    "(If you close it, press ENTER or click the game window to open it again,\n" +
+                    "or drag digdug.zip onto the window.)\n\n" +
+                    "You can also put the ROMs in:\n  " + Path.Combine(Settings.ConfigDir, "roms");
+                bool quiet = Environment.GetEnvironmentVariable("DIGDUG_NOPROMPT") != null;   // for automated tests
+                if (!quiet) Sdl.SDL_ShowSimpleMessageBox(0x20, "Dig Dug - ROMs required", msg, win);
+                Sdl.SDL_SetWindowTitle(win, "Dig Dug - press ENTER or click to choose digdug.zip");
+                if (!quiet) BrowseForRom();
             }
 
             MainLoop();
 
             if (machine != null) machine.SaveEarom(Settings.NvPath);
             cfg.Save();
-            foreach (var p in pads) Sdl.SDL_GameControllerClose(p);
+            foreach (var p in pads) Sdl.SDL_GameControllerClose(p.Handle);
             if (audio != 0) Sdl.SDL_CloseAudioDevice(audio);
             if (tex != IntPtr.Zero) Sdl.SDL_DestroyTexture(tex);
             Sdl.SDL_DestroyRenderer(ren);
@@ -103,6 +111,7 @@ namespace DigDug
             machine = new Machine(roms);
             machine.LoadEarom(Settings.NvPath);
             cfg.ApplyTo(machine);
+            machine.Chip51.AutoCoin = cfg.AutoCoin;
             if (opts != null) Program.ApplyDipOptions(machine, opts);
             menuOpen = true; menuPausesGame = false; screen = Screen.Main; sel = 0;
             Sdl.SDL_SetWindowTitle(win, "Dig Dug");
@@ -119,9 +128,18 @@ namespace DigDug
         {
             var want = new SdlAudioSpec { Freq = Sound.SampleRate, Format = Sdl.AudioS16, Channels = 1, Samples = 1024 };
             SdlAudioSpec got;
-            audio = Sdl.SDL_OpenAudioDevice(IntPtr.Zero, 0, ref want, out got, 0);
+            IntPtr name = string.IsNullOrEmpty(cfg.AudioDevice) ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(cfg.AudioDevice);
+            audio = Sdl.SDL_OpenAudioDevice(name, 0, ref want, out got, 0);
+            if (name != IntPtr.Zero) Marshal.FreeCoTaskMem(name);
+            if (audio == 0 && !string.IsNullOrEmpty(cfg.AudioDevice))
+            {
+                Log("Could not open '" + cfg.AudioDevice + "': " + Sdl.Error() + " - falling back to default");
+                cfg.AudioDevice = "";
+                audio = Sdl.SDL_OpenAudioDevice(IntPtr.Zero, 0, ref want, out got, 0);
+            }
             if (audio == 0) { Log("Audio unavailable: " + Sdl.Error()); return; }
-            Log("Audio opened: " + got.Freq + " Hz, format " + got.Format.ToString("x") + ", " + got.Channels + " ch");
+            { var l = AudioDevices(); Log("Audio devices: " + string.Join(" | ", l.ToArray())); }
+            Log("Audio driver " + Sdl.AudioDriver() + "; opened: " + got.Freq + " Hz, format " + got.Format.ToString("x") + ", " + got.Channels + " ch");
             Sdl.SDL_PauseAudioDevice(audio, 0);
         }
 
@@ -131,10 +149,15 @@ namespace DigDug
             IntPtr p = Sdl.SDL_GameControllerOpen(index);
             if (p == IntPtr.Zero) return;
             int id = Sdl.InstanceId(p);
-            foreach (var q in pads) if (Sdl.InstanceId(q) == id) { return; }
-            pads.Add(p);
-            Log("Controller connected: " + Sdl.ControllerName(p));
+            foreach (var q in pads) if (q.Id == id) return;
+            var pad = new Pad { Handle = p, Id = id };
+            for (int b = 0; b < 15; b++) pad.Btn[b] = Sdl.SDL_GameControllerGetButton(p, b) != 0;
+            for (int a = 0; a < 6; a++) pad.Axis[a] = Sdl.SDL_GameControllerGetAxis(p, a);
+            pads.Add(pad);
+            Log("Controller connected: " + Sdl.ControllerName(p) + " (id " + id + ")");
         }
+
+        Pad FindPad(int id) { foreach (var p in pads) if (p.Id == id) return p; return null; }
 
         // ================================================================== main loop
         void MainLoop()
@@ -168,14 +191,60 @@ namespace DigDug
                 bool frozen = paused || (menuOpen && menuPausesGame);
                 if (!frozen)
                 {
+                    InjectPadEvents();
                     PollInput();
                     machine.RunFrame();
                     PushAudio();
                 }
                 else if (audio != 0) Sdl.SDL_ClearQueuedAudio(audio);
                 machine.Video.Render();
+                if (shotFrame > 0 && machine.FrameCount >= shotFrame)
+                {
+                    Png.Write(shotFile, machine.Video.Pixels, W, H, 2);
+                    Log("saved frame " + machine.FrameCount + " to " + shotFile);
+                    shotFrame = 0; if (shotQuit) running = false;
+                }
                 Present();
             }
+        }
+
+        // Test hook: script entries named "padN" (N = SDL controller button number) are injected as real SDL controller
+        // events, so the event -> pad state -> game input path can be tested without touching hardware.
+        void InjectPadEvents()
+        {
+            if (Script.Count == 0 || pads.Count == 0) return;
+            long f = machine.FrameCount;
+            foreach (var e in Script)
+            {
+                if (!e[1].StartsWith("pad") || e[1].StartsWith("padaxis")) continue;
+                int start = int.Parse(e[0]), dur = e.Length > 2 ? int.Parse(e[2]) : 5;
+                int btn = int.Parse(e[1].Substring(3));
+                if (f == start) PushButton(pads[0].Id, btn, true);
+                if (f == start + dur) PushButton(pads[0].Id, btn, false);
+            }
+        }
+
+        void PushButton(int id, int btn, bool down)
+        {
+            IntPtr e = Marshal.AllocHGlobal(64);
+            for (int i = 0; i < 64; i += 4) Marshal.WriteInt32(e, i, 0);
+            Marshal.WriteInt32(e, 0, (int)(down ? Sdl.EvControllerButtonDown : Sdl.EvControllerButtonUp));
+            Marshal.WriteInt32(e, 8, id);
+            Marshal.WriteByte(e, 12, (byte)btn);
+            Marshal.WriteByte(e, 13, (byte)(down ? 1 : 0));
+            Sdl.SDL_PushEvent(e);
+            Marshal.FreeHGlobal(e);
+        }
+
+        // automated tests: --shot-at <frame> --shot-file <png> [--shot-quit]
+        long shotFrame; string shotFile; bool shotQuit;
+        void ConfigureShot(Dictionary<string, string> o)
+        {
+            string v;
+            if (o != null && o.TryGetValue("shot-at", out v)) long.TryParse(v, out shotFrame);
+            if (o != null && o.TryGetValue("shot-file", out v)) shotFile = v;
+            shotQuit = o != null && o.ContainsKey("shot-quit");
+            if (shotFile == null) shotFrame = 0;
         }
 
         void PushAudio()
@@ -188,11 +257,16 @@ namespace DigDug
             if (queued < 400) n += 400;                         // refill after an underrun
             if (n > abuf.Length) n = abuf.Length;
             machine.Sound.Mix(abuf, 0, n);
+            for (int k = 0; k < n; k++) { int a = Math.Abs((int)abuf[k]); if (a > peak) peak = a; }
             int vol = cfg.Volume;
             if (vol < 100) for (int i = 0; i < n; i++) abuf[i] = (short)(abuf[i] * vol / 100);
             fixed (short* p = abuf) Sdl.SDL_QueueAudio(audio, (IntPtr)p, (uint)(n * 2));
             double tn = sw.Elapsed.TotalSeconds;
-            if (tn - lastLog > 5) { lastLog = tn; Log("t=" + tn.ToString("0") + "s audio queued=" + (Sdl.SDL_GetQueuedAudioSize(audio) / 2) + " samples"); }
+            if (tn - lastLog > 5)
+            {
+                int big = 0; for (int s = 0; s < 64; s++) if (machine.Ram[0xb80 + s * 2] >= 0x80) big++;
+                Log("frame " + machine.FrameCount + " big-sprite slots in RAM: " + big + " credits-menu:" + menuOpen);
+                lastLog = tn; Log("t=" + tn.ToString("0") + "s audio queued=" + (Sdl.SDL_GetQueuedAudioSize(audio) / 2) + " samples, peak since last log " + peak); peak = 0; }
         }
 
         // ================================================================== rendering
@@ -248,14 +322,16 @@ namespace DigDug
 
             foreach (var p in pads)
             {
-                if (Btn(p, Sdl.BtnBack)) coin = true;
-                if (Btn(p, Sdl.BtnStart)) start1 = true;
-                if (Btn(p, Sdl.BtnLShoulder)) start2 = true;
-                if (Btn(p, Sdl.BtnA) || Btn(p, Sdl.BtnB) || Btn(p, Sdl.BtnX) || Btn(p, Sdl.BtnY) || Btn(p, Sdl.BtnRShoulder)
-                    || Sdl.SDL_GameControllerGetAxis(p, Sdl.AxisTriggerRight) > 8000 || Sdl.SDL_GameControllerGetAxis(p, Sdl.AxisTriggerLeft) > 8000) fire = true;
-                if (Btn(p, Sdl.BtnUp)) d[0] = true; if (Btn(p, Sdl.BtnRight)) d[1] = true;
-                if (Btn(p, Sdl.BtnDown)) d[2] = true; if (Btn(p, Sdl.BtnLeft)) d[3] = true;
-                int ax = Sdl.SDL_GameControllerGetAxis(p, Sdl.AxisLX), ay = Sdl.SDL_GameControllerGetAxis(p, Sdl.AxisLY);
+                if (p.Btn[Sdl.BtnBack]) coin = true;
+                if (p.Btn[Sdl.BtnStart]) start1 = true;
+                if (p.Btn[Sdl.BtnLShoulder]) start2 = true;
+                if (p.Btn[Sdl.BtnA] || p.Btn[Sdl.BtnB] || p.Btn[Sdl.BtnX] || p.Btn[Sdl.BtnY] || p.Btn[Sdl.BtnRShoulder]
+                    || p.Axis[Sdl.AxisTriggerRight] > 8000 || p.Axis[Sdl.AxisTriggerLeft] > 8000) fire = true;
+                if (p.Btn[Sdl.BtnUp]) d[0] = true;
+                if (p.Btn[Sdl.BtnRight]) d[1] = true;
+                if (p.Btn[Sdl.BtnDown]) d[2] = true;
+                if (p.Btn[Sdl.BtnLeft]) d[3] = true;
+                int ax = p.Axis[Sdl.AxisLX], ay = p.Axis[Sdl.AxisLY];
                 if (Math.Max(Math.Abs(ax), Math.Abs(ay)) > 14000)
                 {
                     if (Math.Abs(ax) >= Math.Abs(ay)) { if (ax > 0) d[1] = true; else d[3] = true; }
@@ -270,11 +346,21 @@ namespace DigDug
 
             i.Coin1 = coin; i.Coin2 = KeyDown(Sc6); i.Start1 = start1; i.Start2 = start2; i.Fire = fire;
             i.Service = KeyDown(ScF2);
+            if (Script.Count > 0 && Script.Exists(s => !s[1].StartsWith("pad")))   // automated test input: --at frame:key:duration (same as the headless runner)
+            {
+                long f = machine.FrameCount + 1;
+                foreach (var e in Script)
+                {
+                    int start = int.Parse(e[0]), dur = e.Length > 2 ? int.Parse(e[2]) : 5;
+                    if (f < start || f >= start + dur) continue;
+                    switch (e[1]) { case "coin1": coin = true; break; case "start1": start1 = true; break; case "fire": fire = true; break; }
+                }
+                i.Coin1 = coin; i.Start1 = start1; i.Fire = fire; i.Dir = -1;
+                return;
+            }
             i.Dir = (menuOpen ? -1 : lastDir) < 0 ? -1 : lastDir * 2;
             if (menuOpen) { i.Fire = false; i.Start1 = false; i.Start2 = false; i.Coin1 = false; }
         }
-
-        static bool Btn(IntPtr p, int b) { return Sdl.SDL_GameControllerGetButton(p, b) != 0; }
 
         void PumpEvents()
         {
@@ -284,16 +370,33 @@ namespace DigDug
                 switch (type)
                 {
                     case Sdl.EvQuit: running = false; break;
+                    case Sdl.EvMouseButtonDown: if (machine == null) BrowseForRom(); break;
                     case Sdl.EvKeyDown:
                         if (Marshal.ReadByte(ev, 13) == 0) OnKey(Marshal.ReadInt32(ev, 16));
                         break;
-                    case Sdl.EvControllerButtonDown: OnPadButton(Marshal.ReadByte(ev, 12)); break;
+                    case Sdl.EvControllerAxis:
+                        {
+                            var pa = FindPad(Marshal.ReadInt32(ev, 8));
+                            int ax = Marshal.ReadByte(ev, 12);
+                            if (pa != null && ax < 6) pa.Axis[ax] = Marshal.ReadInt16(ev, 16);
+                            break;
+                        }
+                    case Sdl.EvControllerButtonDown:
+                    case Sdl.EvControllerButtonUp:
+                        {
+                            var pb = FindPad(Marshal.ReadInt32(ev, 8));
+                            int b = Marshal.ReadByte(ev, 12);
+                            bool down = type == Sdl.EvControllerButtonDown;
+                            if (pb != null && b < 16) pb.Btn[b] = down;
+                            if (down) { Log("pad button " + b); OnPadButton(b); }
+                            break;
+                        }
                     case Sdl.EvControllerDeviceAdded: OpenPad(Marshal.ReadInt32(ev, 8)); break;
                     case Sdl.EvControllerDeviceRemoved:
                         {
                             int id = Marshal.ReadInt32(ev, 8);
                             for (int i = pads.Count - 1; i >= 0; i--)
-                                if (Sdl.InstanceId(pads[i]) == id) { Sdl.SDL_GameControllerClose(pads[i]); pads.RemoveAt(i); }
+                                if (pads[i].Id == id) { Sdl.SDL_GameControllerClose(pads[i].Handle); pads.RemoveAt(i); Log("Controller removed (id " + id + ")"); }
                             break;
                         }
                     case Sdl.EvDropFile:
@@ -308,8 +411,36 @@ namespace DigDug
             }
         }
 
+        // Native file picker: PowerShell/WinForms on Windows, zenity or kdialog on Linux.
+        void BrowseForRom()
+        {
+            string[][] attempts;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                attempts = new[] { new[] { "powershell", "-NoProfile", "-STA", "-Command",
+                    "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title = 'Select your Dig Dug ROM zip'; $d.Filter = 'ROM set (*.zip)|*.zip|All files (*.*)|*.*'; if ($d.ShowDialog() -eq 'OK') { $d.FileName }" } };
+            else
+                attempts = new[] { new[] { "zenity", "--file-selection", "--title=Select your Dig Dug ROM zip" }, new[] { "kdialog", "--getopenfilename", ".", "*.zip" } };
+            foreach (var a in attempts)
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo(a[0]) { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+                    for (int i = 1; i < a.Length; i++) psi.ArgumentList.Add(a[i]);
+                    using (var proc = Process.Start(psi))
+                    {
+                        string outp = proc.StandardOutput.ReadToEnd().Trim();
+                        proc.WaitForExit();
+                        if (outp.Length > 0) { OnDrop(outp.Split('\n')[0].Trim()); return; }
+                        return;
+                    }
+                }
+                catch (Exception ex) { Log("file dialog '" + a[0] + "' unavailable: " + ex.Message); }
+            }
+        }
+
         void OnDrop(string path)
         {
+            Log("drop/open: " + path);
             if (machine != null || string.IsNullOrEmpty(path)) return;
             try
             {
@@ -319,14 +450,15 @@ namespace DigDug
             }
             catch (Exception ex)
             {
+                Log("ROM load failed: " + ex);
+                if (Environment.GetEnvironmentVariable("DIGDUG_NOPROMPT") != null) return;
                 Sdl.SDL_ShowSimpleMessageBox(0x10, "Dig Dug", "That doesn't look like a complete Dig Dug ROM set:\n\n" + ex.Message, win);
             }
         }
 
         void OnKey(int sc)
         {
-            Log("key " + sc);
-            if (machine == null) return;
+            if (machine == null) { if (sc == ScReturn || sc == ScKpEnter) BrowseForRom(); return; }
             if (menuOpen)
             {
                 switch (sc)
@@ -352,7 +484,7 @@ namespace DigDug
 
         void OnPadButton(int b)
         {
-            if (machine == null) return;
+            if (machine == null) { if (b == Sdl.BtnA || b == Sdl.BtnStart) BrowseForRom(); return; }
             if (menuOpen)
             {
                 switch (b)
@@ -373,17 +505,9 @@ namespace DigDug
         void OpenMenu() { menuOpen = true; menuPausesGame = true; screen = Screen.Main; sel = 0; }
         void CloseMenu() { menuOpen = false; cfg.Save(); }
 
-        int ItemCount { get { return screen == Screen.Main ? 5 : screen == Screen.Options ? 10 : 1; } }
-        void MenuMove(int d)
-        {
-            int first;
-            var lines = ScreenLines(out first);
-            for (int tries = 0; tries < 12; tries++)
-            {
-                sel = (sel + d + ItemCount) % ItemCount;
-                if (screen != Screen.Options || lines[sel].Length > 0) break;   // skip the blank spacer row
-            }
-        }
+        const int OptionCount = 12;
+        int ItemCount { get { return screen == Screen.Main ? 5 : screen == Screen.Options ? OptionCount : 1; } }
+        void MenuMove(int d) { sel = (sel + d + ItemCount) % ItemCount; }
 
         void MenuBack()
         {
@@ -405,8 +529,58 @@ namespace DigDug
                 }
             }
             else if (screen == Screen.Controls) { screen = Screen.Main; sel = 2; }
-            else if (sel == 9) { screen = Screen.Main; sel = 1; cfg.Save(); }
+            else if (sel == OptionCount - 1) { screen = Screen.Main; sel = 1; cfg.Save(); }
+            else if (sel == 6) PlayTestTone();
             else MenuAdjust(1);
+        }
+
+        // ---- audio device selection (some PCs route new apps to a virtual/other output, so let the user pick)
+        List<string> AudioDevices()
+        {
+            var l = new List<string>();
+            int n = Sdl.SDL_GetNumAudioDevices(0);
+            for (int i = 0; i < n; i++) l.Add(Marshal.PtrToStringUTF8(Sdl.SDL_GetAudioDeviceName(i, 0)) ?? ("Device " + i));
+            return l;
+        }
+
+        string AudioLabel()
+        {
+            if (string.IsNullOrEmpty(cfg.AudioDevice)) return "DEFAULT";
+            var l = AudioDevices();
+            int i = l.IndexOf(cfg.AudioDevice);
+            string n = cfg.AudioDevice.ToUpperInvariant();
+            var sb = new System.Text.StringBuilder((i >= 0 ? (i + 1) + " " : ""));
+            foreach (char c in n) if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ') sb.Append(c);
+            string s = sb.ToString().Trim();
+            return s.Length > 14 ? s.Substring(0, 14) : s;
+        }
+
+        void CycleAudioDevice(int d)
+        {
+            var l = AudioDevices();
+            int idx = string.IsNullOrEmpty(cfg.AudioDevice) ? -1 : l.IndexOf(cfg.AudioDevice);
+            idx += d;
+            if (idx < -1) idx = l.Count - 1;
+            if (idx >= l.Count) idx = -1;
+            cfg.AudioDevice = idx < 0 ? "" : l[idx];
+            Log("audio device -> " + (idx < 0 ? "default" : l[idx]));
+            if (audio != 0) { Sdl.SDL_CloseAudioDevice(audio); audio = 0; }
+            OpenAudio();
+            PlayTestTone();
+        }
+
+        void PlayTestTone()
+        {
+            if (audio == 0) return;
+            Sdl.SDL_ClearQueuedAudio(audio);
+            var t = new short[Sound.SampleRate / 2];
+            for (int i = 0; i < t.Length; i++)
+            {
+                double env = Math.Min(1.0, Math.Min(i, t.Length - i) / 2000.0);
+                double f = i < t.Length / 2 ? 440 : 660;
+                t[i] = (short)(Math.Sin(2 * Math.PI * f * i / Sound.SampleRate) * 9000 * env * cfg.Volume / 100.0);
+            }
+            fixed (short* p = t) Sdl.SDL_QueueAudio(audio, (IntPtr)p, (uint)(t.Length * 2));
         }
 
         void MenuAdjust(int d)
@@ -422,10 +596,12 @@ namespace DigDug
                 case 2: cfg.IntegerScale = !cfg.IntegerScale; break;
                 case 3: cfg.Smooth = !cfg.Smooth; MakeTexture(); break;
                 case 4: cfg.Volume = Math.Max(0, Math.Min(100, cfg.Volume + d * 10)); break;
-                case 5: { int i = (Array.IndexOf(Settings.LivesValues, cfg.Lives) + d + 4) % 4; cfg.Lives = Settings.LivesValues[i]; cfg.ApplyTo(machine); break; }
-                case 6: { int i = (Array.IndexOf(Settings.BonusValues, cfg.Bonus) + d + 5) % 5; cfg.Bonus = Settings.BonusValues[i]; cfg.ApplyTo(machine); break; }
-                case 7: cfg.Rank = (cfg.Rank + d + 4) % 4; cfg.ApplyTo(machine); break;
-                case 8: break;
+                case 5: CycleAudioDevice(d); break;
+                case 6: break;
+                case 7: { int i = (Array.IndexOf(Settings.LivesValues, cfg.Lives) + d + 4) % 4; cfg.Lives = Settings.LivesValues[i]; cfg.ApplyTo(machine); break; }
+                case 8: { int i = (Array.IndexOf(Settings.BonusValues, cfg.Bonus) + d + 5) % 5; cfg.Bonus = Settings.BonusValues[i]; cfg.ApplyTo(machine); break; }
+                case 9: cfg.Rank = (cfg.Rank + d + 4) % 4; cfg.ApplyTo(machine); break;
+                case 10: cfg.AutoCoin = !cfg.AutoCoin; machine.Chip51.AutoCoin = cfg.AutoCoin; break;
             }
         }
 
@@ -463,9 +639,9 @@ namespace DigDug
                 {
                     "FULLSCREEN " + (cfg.Fullscreen ? "ON" : "OFF"), "WINDOW SIZE " + scale,
                     "SCALING " + (cfg.IntegerScale ? "SHARP" : "FIT"), "FILTER " + (cfg.Smooth ? "SMOOTH" : "PIXELS"),
-                    "VOLUME " + cfg.Volume, "LIVES " + cfg.Lives,
+                    "VOLUME " + cfg.Volume, "AUDIO " + AudioLabel(), "TEST SOUND", "LIVES " + cfg.Lives,
                     "BONUS " + Settings.BonusNames[Array.IndexOf(Settings.BonusValues, cfg.Bonus)],
-                    "RANK " + (char)('A' + cfg.Rank), "", "BACK"
+                    "RANK " + (char)('A' + cfg.Rank), "AUTO COIN " + (cfg.AutoCoin ? "ON" : "OFF"), "BACK"
                 };
             }
             return new string[0];
@@ -492,10 +668,11 @@ namespace DigDug
                 if (lines[i].Length == 0) continue;
                 bool on = i == sel;
                 int col = on ? unchecked((int)0xffffff40) : unchecked((int)0xffe0e0ff);
-                int x = (W - lines[i].Length * 8) / 2;
-                if (screen == Screen.Options && i < 9) x = 16;
-                Text(lines[i], x, 72 + i * 18, col);
-                if (on) Marker(screen == Screen.Options && i < 9 ? 4 : x - 12, 72 + i * 18, col);
+                bool opt = screen == Screen.Options && i < OptionCount - 1;
+                int x = opt ? 16 : (W - lines[i].Length * 8) / 2;
+                int y = screen == Screen.Options ? 52 + i * 16 : 72 + i * 18;
+                Text(lines[i], x, y, col);
+                if (on) Marker(opt ? 4 : x - 12, y, col);
             }
             string hint = screen == Screen.Main ? "ARROWS AND ENTER OR PAD" : "LEFT RIGHT TO CHANGE";
             Text(hint, (W - hint.Length * 8) / 2, 268, unchecked((int)0xff80ff80));

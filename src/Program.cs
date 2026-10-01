@@ -19,7 +19,7 @@ namespace DigDug
             "  --dip0 <hex> --dip1 <hex>   raw DIP switch bytes (advanced)\n\n" +
             "Developer options: --disasm --dumpgfx --makeicon --frames N (see docs/DEVELOPMENT.md)\n";
 
-        static readonly string[] DevFlags = { "disasm", "dumpgfx", "frames", "makeicon", "help" };
+        static readonly string[] DevFlags = { "disasm", "dumpgfx", "frames", "makeicon", "help", "padtest" };
 
         [STAThread]
         static int Main(string[] args)
@@ -45,6 +45,7 @@ namespace DigDug
             if (dev && RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) { try { AttachConsole(-1); } catch { } }
             if (opts.ContainsKey("help")) { Console.Write(Usage); return 0; }
             if (opts.ContainsKey("makeicon")) { DevTools.MakeIcon(); return 0; }
+            if (opts.ContainsKey("padtest")) return PadTest();
             if (opts.ContainsKey("roms")) romPath = opts["roms"];
 
             var cfg = Settings.Load();
@@ -67,7 +68,36 @@ namespace DigDug
             string v2;
             if (opts.TryGetValue("lives", out v2)) { int n; if (int.TryParse(v2, out n) && Array.IndexOf(Settings.LivesValues, n) >= 0) cfg.Lives = n; }
             if (opts.TryGetValue("rank", out v2) && v2.Length > 0) cfg.Rank = Math.Max(0, Math.Min(3, char.ToUpperInvariant(v2[0]) - 'A'));
-            return new App(cfg).Run(roms, opts);
+            var app = new App(cfg);
+            foreach (var s in scripted) app.Script.Add(s.Split(':'));
+            return app.Run(roms, opts);
+        }
+
+        // `DigDug --padtest`: print live controller state (diagnostics)
+        static int PadTest()
+        {
+            Sdl.SDL_Init(Sdl.InitVideo | Sdl.InitGameController | Sdl.InitEvents);
+            var ev = Marshal.AllocHGlobal(64);
+            var pads = new List<IntPtr>();
+            for (int i = 0; i < Sdl.SDL_NumJoysticks(); i++)
+            {
+                Console.WriteLine("device " + i + " isGameController=" + Sdl.SDL_IsGameController(i));
+                if (Sdl.SDL_IsGameController(i) != 0) { var p = Sdl.SDL_GameControllerOpen(i); if (p != IntPtr.Zero) { pads.Add(p); Console.WriteLine("  opened: " + Sdl.ControllerName(p)); } }
+            }
+            for (int s = 0; s < 6; s++)
+            {
+                while (Sdl.SDL_PollEvent(ev) != 0) { }
+                foreach (var p in pads)
+                {
+                    var sb = new System.Text.StringBuilder("t" + s + " buttons:");
+                    for (int b = 0; b < 15; b++) if (Sdl.SDL_GameControllerGetButton(p, b) != 0) sb.Append(" " + b);
+                    sb.Append("  axes:");
+                    for (int a = 0; a < 6; a++) sb.Append(" " + Sdl.SDL_GameControllerGetAxis(p, a));
+                    Console.WriteLine(sb.ToString());
+                }
+                Sdl.SDL_Delay(1000);
+            }
+            return 0;
         }
 
         // Translate command-line switches into the two DIP bytes the 53xx chip reports.
@@ -97,7 +127,7 @@ namespace DigDug
             if (!string.IsNullOrEmpty(given)) list.Add(given);
             if (!string.IsNullOrEmpty(cfg.RomPath)) list.Add(cfg.RomPath);
             string exeDir = AppContext.BaseDirectory;
-            var roots = new List<string> { exeDir, Path.Combine(exeDir, ".."), Settings.ConfigDir, Directory.GetCurrentDirectory() };
+            var roots = new List<string> { exeDir, Path.Combine(exeDir, ".."), Path.Combine(exeDir, "..", ".."), Settings.ConfigDir, Directory.GetCurrentDirectory() };
             string appImage = Environment.GetEnvironmentVariable("APPIMAGE");   // folder containing the .AppImage file
             if (!string.IsNullOrEmpty(appImage)) roots.Insert(0, Path.GetDirectoryName(appImage));
             foreach (var root in roots)

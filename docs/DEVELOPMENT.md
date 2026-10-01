@@ -33,6 +33,11 @@ All of these write into `./out` (git-ignored) and need the ROMs. On Windows they
 | `--spr` / `--hex N` / `--text` | Dump sprite RAM / raw tile codes / decoded screen text |
 | `--sprstats` | Report unusual sprite codes / flags used |
 | `--nopf` | Hide the playfield layer |
+| `--watch lo-hi --watchfrom N` | Log every RAM write (CPU, PC, value) to an address range for 700 frames |
+| `--nv 1` | Load the saved high-score memory |
+| `--padtest` | Print live controller state |
+
+GUI test hooks (the real window): `--at 2000:pad6:3` injects SDL controller button 6 (Start) as a real event; `--shot-at N --shot-file f.png --shot-quit` saves the game frame and exits.
 
 (The first ~1900 frames are the power-on self-test; the attract mode begins after that.)
 

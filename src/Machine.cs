@@ -1,4 +1,4 @@
-﻿// Namco Dig Dug (1982) arcade board: 3x Z80, shared RAM, 06xx I/O controller with 51xx/53xx chips (emulated at
+// Namco Dig Dug (1982) arcade board: 3x Z80, shared RAM, 06xx I/O controller with 51xx/53xx chips (emulated at
 // function level), video and 3-voice wavetable sound.
 using System;
 using System.IO;
@@ -43,6 +43,7 @@ namespace DigDug
         public bool Trace06;
         public int HitPc = -1, HitCount;
         public bool[] Cov;
+        public int WatchLo, WatchHi; public long WatchFrom;
         public long FrameCount;
         readonly int[] budget = new int[3];
 
@@ -179,7 +180,12 @@ namespace DigDug
             public void Write(int a, int v)
             {
                 a &= 0xffff; v &= 0xff;
-                if (a >= 0x8000 && a < 0xa000) { m.Ram[a - 0x8000] = (byte)v; return; }
+                if (a >= 0x8000 && a < 0xa000)
+                {
+                    if (m.WatchLo > 0 && a >= m.WatchLo && a <= m.WatchHi && m.FrameCount >= m.WatchFrom && m.FrameCount < m.WatchFrom + 700)
+                        Console.WriteLine("f" + m.FrameCount + " cpu" + (id + 1) + " pc=" + m.Cpu[id].PC.ToString("x4") + " ["+a.ToString("x4")+"]=" + v.ToString("x2"));
+                    m.Ram[a - 0x8000] = (byte)v; return;
+                }
                 if (a >= 0x6800 && a < 0x6820) { m.Sound.Write(a - 0x6800, v); return; }
                 if (a >= 0x6820 && a < 0x6828) { m.LatchWrite(a - 0x6820, v); return; }
                 if (a >= 0x7000 && a < 0x7100) { m.Data06Write(v); return; }
@@ -203,7 +209,8 @@ namespace DigDug
         readonly int[] coinage = { 1, 1, 1, 1 };
         int credits;
         readonly int[] coins = new int[2];
-        int readIdx;
+        int readIdx, pendingStart, pendingDelay;
+        public bool AutoCoin = true;
         bool lastCoin1, lastCoin2, lastStart1, lastStart2, lastFire, fireHeld, fireEdge;
 
         public Namco51(Machine mm) { m = mm; }
@@ -212,7 +219,7 @@ namespace DigDug
 
         public void Reset()
         {
-            mode = 0; coinageLeft = 0; credits = 0; coins[0] = coins[1] = 0;
+            mode = 0; coinageLeft = 0; credits = 0; pendingStart = 0; coins[0] = coins[1] = 0;
             lastCoin1 = lastCoin2 = lastStart1 = lastStart2 = lastFire = fireHeld = fireEdge = false;
         }
 
@@ -241,8 +248,27 @@ namespace DigDug
             var i = m.Input;
             if (i.Coin1 && !lastCoin1) AddCoin(0);
             if (i.Coin2 && !lastCoin2) AddCoin(1);
-            if (i.Start1 && !lastStart1 && credits >= 1) credits -= 1;
-            if (i.Start2 && !lastStart2 && credits >= 2) credits -= 2;
+            if (pendingStart > 0)
+            {
+                // auto-coin: let the game see the new credit for a few polls (it runs its "coin inserted"
+                // screen transition), as it would with a real coin, then spend it
+                if (--pendingDelay <= 0)
+                {
+                    if (credits >= pendingStart) credits -= pendingStart;
+                    pendingStart = 0;
+                }
+            }
+            else
+            {
+                bool s1 = i.Start1 && !lastStart1, s2 = i.Start2 && !lastStart2;
+                if (s2 && credits >= 2) credits -= 2;
+                else if (s1 && credits >= 1) credits -= 1;
+                else if (AutoCoin && (s1 || s2) && credits < 2)
+                {
+                    pendingStart = s2 ? 2 : 1; pendingDelay = 8;
+                    credits = Math.Max(credits, pendingStart);
+                }
+            }
             lastCoin1 = i.Coin1; lastCoin2 = i.Coin2; lastStart1 = i.Start1; lastStart2 = i.Start2;
             if (credits > 99) credits = 99;
         }

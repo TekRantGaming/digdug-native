@@ -1,4 +1,4 @@
-﻿// Developer helpers (disassembly, graphics sheets, headless frame dumps). Output goes to ./out and is git-ignored.
+// Developer helpers (disassembly, graphics sheets, headless frame dumps). Output goes to ./out and is git-ignored.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -180,8 +180,10 @@ namespace DigDug
             Directory.CreateDirectory("out");
             var m = new Machine(rs);
             Program.ApplyDipOptions(m, o);
+            if (o.ContainsKey("nv")) m.LoadEarom(Settings.NvPath);
             if (o.ContainsKey("trace06")) m.Trace06 = true;
             if (o.ContainsKey("nopf")) m.Video.DbgNoPf = true;
+            if (o.ContainsKey("watch")) { var w = o["watch"].Split('-'); m.WatchLo = Convert.ToInt32(w[0], 16); m.WatchHi = Convert.ToInt32(w[1], 16); m.WatchFrom = o.ContainsKey("watchfrom") ? long.Parse(o["watchfrom"]) : 0; }
             if (o.ContainsKey("hit")) m.HitPc = Convert.ToInt32(o["hit"], 16);
             int frames = int.Parse(o["frames"]);
             string baseName = o.ContainsKey("out") ? o["out"] : "out/frame";
