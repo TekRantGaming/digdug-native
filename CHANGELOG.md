@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Added an AI disclosure (AI-DISCLOSURE.md, README banner)
+- Removed the oms/ placeholder folder from the repository so it can't be mistaken for game data
+- CI now fails if any ROM-like file is found in the repository, the Windows package or the AppImage
+
 ## 1.0.0
 
 First public release.

@@ -22,6 +22,13 @@ jobs:
         run: |
           Copy-Item README.md,LICENSE out/win/
           Compress-Archive -Path out/win/* -DestinationPath DigDug-windows-x64.zip
+      - name: Safety check - no ROMs in repository or package
+        shell: bash
+        run: |
+          git ls-files > repo-files.txt
+          bash packaging/check-no-roms.sh repo-files.txt
+          unzip -Z1 DigDug-windows-x64.zip > zip-files.txt
+          bash packaging/check-no-roms.sh zip-files.txt
       - uses: actions/upload-artifact@v4
         with:
           name: DigDug-windows-x64
@@ -38,6 +45,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsdl2-2.0-0 wget
       - name: Build AppImage
         run: bash ./packaging/linux/build-appimage.sh
+      - name: Safety check - no ROMs in repository or AppImage
+        run: |
+          git ls-files > repo-files.txt
+          bash packaging/check-no-roms.sh repo-files.txt
+          cd out && ./DigDug-x86_64.AppImage --appimage-extract > /dev/null && find squashfs-root -type f > ../appimage-files.txt && cd ..
+          bash packaging/check-no-roms.sh appimage-files.txt
       - uses: actions/upload-artifact@v4
         with:
           name: DigDug-linux-x86_64

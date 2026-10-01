@@ -12,10 +12,15 @@
 
 </div>
 
-> **You must supply your own ROMs.** This repository and its releases contain **no** game ROMs, graphics or audio
-> from the original game. You need your own legally obtained copy of the Dig Dug (MAME `digdug`) ROM set – see
-> [Getting the ROMs](#getting-the-roms). Dig Dug is © Bandai Namco Entertainment; this project is unofficial and
-> unaffiliated.
+> **🤖 AI disclosure:** this entire project – all code, build scripts, documentation and research notes – was written by
+> an AI (Claude, by Anthropic, via Claude Code) at the direction of the repository owner. It may contain bugs. See
+> [AI-DISCLOSURE.md](AI-DISCLOSURE.md).
+
+> **You must supply your own ROMs.** This repository and its releases contain **no** game ROM files (the build
+> pipeline checks for this and fails if any are found). You need your own legally obtained copy of the Dig Dug
+> (MAME `digdug`) ROM set – see [Getting the ROMs](#getting-the-roms). The program asks for the file and you can
+> drag and drop `digdug.zip` onto its window. Dig Dug is © Bandai Namco Entertainment; this project is unofficial
+> and unaffiliated.
 
 ---
 
@@ -253,12 +258,13 @@ docs/               Hardware notes, developer guide, screenshots
 ## Contributing
 
 Bug reports and pull requests are welcome – see [CONTRIBUTING.md](CONTRIBUTING.md). Please **never** attach ROM files,
-disassembly output or other copyrighted game data to issues or pull requests.
+disassembly output or other copyrighted game data to issues or pull requests. AI-assisted contributions are fine if you say so.
 
 ## Credits and legal
 
-- Dig Dug © 1982 Namco (now Bandai Namco Entertainment). This is an unofficial fan project; no original game data is
-  distributed. Screenshots in this repository show the game running from the author's own ROM set.
+- Dig Dug © 1982 Namco (now Bandai Namco Entertainment). This is an unofficial fan project; no ROM files or other original
+  game data are distributed. The screenshots in docs/images are captures of the game running from the owner's own ROM set.
+- **Created by AI:** all code and documentation were written by Claude (Anthropic) – see [AI-DISCLOSURE.md](AI-DISCLOSURE.md).
 - Source code in this repository is released under the [MIT license](LICENSE). The license covers only the code written
   for this project, **not** the Dig Dug game, its ROMs, artwork or sound.
 - [SDL2](https://libsdl.org) © Sam Lantinga and contributors, zlib license.

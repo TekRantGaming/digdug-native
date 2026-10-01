@@ -4,6 +4,7 @@ Thanks for your interest! Bug reports, fixes and improvements are welcome.
 
 ## Ground rules
 
+- This project was written by an AI (see [AI-DISCLOSURE.md](AI-DISCLOSURE.md)); AI-assisted pull requests are welcome but please say so in the description.
 - **Never** upload ROM files, ROM-derived disassembly (`--disasm` output), or other copyrighted game data
   – not in issues, pull requests, or commits. The `.gitignore` is set up to help; please check `git status` before pushing.
 - Keep changes focused; one topic per pull request.

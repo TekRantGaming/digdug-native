@@ -1,6 +1,5 @@
 # Game data is copyrighted and must never be committed
-roms/*
-!roms/README.md
+roms/
 *.zip
 *.rom
 *.bin
