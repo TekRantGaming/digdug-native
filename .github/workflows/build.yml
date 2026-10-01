@@ -71,7 +71,9 @@ jobs:
           name: Dig Dug native port ${{ github.ref_name }}
           generate_release_notes: true
           body: |
-            Native Windows and Linux builds of the Dig Dug arcade game. **You need your own Dig Dug ROM set** (MAME `digdug`) – none is included.
+            Native Windows and Linux builds of the Dig Dug arcade game. **You need your own Dig Dug ROM set** (MAME `digdug`) – none is included, and the build fails if any ROM-like file is found in a package.
+
+            🤖 **AI disclosure:** this entire project was written by an AI (Claude, by Anthropic) at the owner's direction; it may contain bugs. See [AI-DISCLOSURE.md](https://github.com/${{ github.repository }}/blob/main/AI-DISCLOSURE.md).
 
             - **Windows (64-bit):** download `DigDug-windows-x64.zip`, extract, put your ROMs in a `roms` folder next to `DigDug.exe` (or pick `digdug.zip` when asked), run `DigDug.exe`.
             - **Linux (x86-64):** download `DigDug-x86_64.AppImage`, `chmod +x` it, put `digdug.zip` beside it (or pick it when asked), run it.
