@@ -109,8 +109,9 @@ The game looks for them in this order:
 3. a `roms/` folder or `digdug.zip` next to the program (or next to the `.AppImage`)
 4. the per-user config folder: `%APPDATA%\DigDugNative\roms` (Windows) or `~/.config/DigDugNative/roms` (Linux)
 
-If nothing is found, a file picker opens; you can also **drag and drop `digdug.zip` onto the window**. The location is
-remembered after the first successful load.
+If nothing is found, the window shows a **"ROM files required"** page: **drag and drop `digdug.zip` onto the window**, or press Enter / click / A to open a file picker. Nothing blocks the window, so dropping works at any time. The location is remembered after the first successful load.
+
+<p align="center"><img src="docs/images/rom-required.png" width="260" alt="ROM required page"></p>
 
 ## Controls
 

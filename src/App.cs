@@ -83,15 +83,10 @@ namespace DigDug
             if (roms != null) StartMachine(roms, opts);
             else
             {
-                string msg = "Dig Dug needs its original ROM files, which are not included with this program.\n\n" +
-                    "After you press OK a file dialog opens: choose your digdug.zip.\n" +
-                    "(If you close it, press ENTER or click the game window to open it again,\n" +
-                    "or drag digdug.zip onto the window.)\n\n" +
-                    "You can also put the ROMs in:\n  " + Path.Combine(Settings.ConfigDir, "roms");
-                bool quiet = Environment.GetEnvironmentVariable("DIGDUG_NOPROMPT") != null;   // for automated tests
-                if (!quiet) Sdl.SDL_ShowSimpleMessageBox(0x20, "Dig Dug - ROMs required", msg, win);
-                Sdl.SDL_SetWindowTitle(win, "Dig Dug - press ENTER or click to choose digdug.zip");
-                if (!quiet) BrowseForRom();
+                // No modal dialogs here: a blocked window cannot receive a drag-and-drop. The "ROM required" page is
+                // drawn in the window itself and the file picker (Enter / click / A) runs on a background thread.
+                Sdl.SDL_SetWindowTitle(win, "Dig Dug - drop your digdug.zip onto this window");
+                Log("No ROM set found; waiting for a drop or file pick");
             }
 
             MainLoop();
@@ -201,7 +196,15 @@ namespace DigDug
             while (running)
             {
                 PumpEvents();
-                if (machine == null) { RenderBlank(); Sdl.SDL_Delay(30); continue; }
+                if (machine == null)
+                {
+                    string pp = pendingPath;
+                    if (pp != null) { pendingPath = null; OnDrop(pp); if (machine != null) continue; }
+                    RenderRomRequired();
+                    if (shotFile != null && ++noRomFrames == 20) { Png.Write(shotFile, frameBuf, W, H, 2); if (shotQuit) running = false; }
+                    Sdl.SDL_Delay(30);
+                    continue;
+                }
 
                 bool booting = machine.FrameCount < BootFrames;
                 bool fast = booting || KeyDown(ScTab);
@@ -328,16 +331,60 @@ namespace DigDug
             return src;
         }
 
-        void Present()
+        // ---- the page shown while no ROM set is loaded (uses the built-in font; no game data needed)
+        volatile string pendingPath;
+        string romError;
+        int noRomFrames, animTick;
+        volatile bool browsing;
+
+        void RenderRomRequired()
         {
-            int[] src = BuildSource();
+            animTick++;
+            int bg = unchecked((int)0xff101830), gold = unchecked((int)0xffffd800), white = unchecked((int)0xffe8e8ff);
+            int green = unchecked((int)0xff80ff80), red = unchecked((int)0xffff6060), dim = unchecked((int)0xff8890b0);
+            for (int i = 0; i < frameBuf.Length; i++) frameBuf[i] = bg;
+            Action<string, int, int, int, int> center = (s, y, col, scale, dummy) => Font5x7.Draw(frameBuf, W, H, s, (W - Font5x7.Width(s, scale)) / 2, y, col, scale);
+            center("DIG DUG", 14, gold, 4, 0);
+            center("NATIVE PORT", 50, white, 1, 0);
+            center("ROM FILES REQUIRED", 74, red, 1, 0);
+            center("THE GAME ROMS ARE NOT", 88, dim, 1, 0);
+            center("INCLUDED - BRING YOUR OWN", 98, dim, 1, 0);
+
+            // marching-ants drop box
+            int bx0 = 14, by0 = 122, bx1 = W - 15, by1 = 206;
+            for (int x = bx0; x <= bx1; x++)
+                for (int k = 0; k < 2; k++)
+                {
+                    int y = k == 0 ? by0 : by1;
+                    if (((x + animTick / 3) / 4) % 2 == 0) { frameBuf[y * W + x] = gold; frameBuf[(y + 1) * W + x] = gold; }
+                }
+            for (int y = by0; y <= by1; y++)
+                for (int k = 0; k < 2; k++)
+                {
+                    int x = k == 0 ? bx0 : bx1;
+                    if (((y + animTick / 3) / 4) % 2 == 0) { frameBuf[y * W + x] = gold; frameBuf[y * W + x + 1] = gold; }
+                }
+            center("DRAG AND DROP", 142, white, 2, 0);
+            center("YOUR DIGDUG.ZIP", 164, gold, 2, 0);
+            center("ONTO THIS WINDOW", 186, white, 1, 0);
+
+            center(browsing ? "CHOOSE THE FILE IN THE DIALOG..." : "OR PRESS ENTER / CLICK / A", 220, green, 1, 0);
+            center("TO BROWSE FOR IT", 232, green, 1, 0);
+            if (romError != null) center(romError, 252, red, 1, 0);
+            else center("SEE README FOR DETAILS", 264, dim, 1, 0);
+            Present(frameBuf);
+        }
+
+        void Present(int[] fixedSrc = null)
+        {
+            int[] src = fixedSrc ?? BuildSource();
             int ow, oh; Sdl.SDL_GetRendererOutputSize(ren, out ow, out oh);
 
             // widescreen: extend the level sideways (dimmed, mirrored dirt) so wide screens aren't left with black bars;
             // a bright frame marks the real 224x288 playfield so nobody tries to walk into the extension.
             int tw = W;
             double ratio = oh > 0 ? (double)ow / oh : 0;
-            if (cfg.Widescreen && ratio > (double)W / H + 0.02) { tw = Math.Min(1280, (int)Math.Ceiling(H * ratio)); tw += tw & 1; if (tw < W) tw = W; }
+            if (fixedSrc == null && cfg.Widescreen && ratio > (double)W / H + 0.02) { tw = Math.Min(1280, (int)Math.Ceiling(H * ratio)); tw += tw & 1; if (tw < W) tw = W; }
             if (tw != texW) { texW = tw; MakeTexture(); }
             if (tw > W) src = ComposeWide(src, tw);
             fixed (int* p = src) Sdl.SDL_UpdateTexture(tex, IntPtr.Zero, (IntPtr)p, tw * 4);
@@ -473,8 +520,21 @@ namespace DigDug
             }
         }
 
-        // Native file picker: PowerShell/WinForms on Windows, zenity or kdialog on Linux.
+        // Native file picker (PowerShell/WinForms on Windows, zenity or kdialog on Linux) on a background thread,
+        // so the window keeps running - and keeps accepting drag-and-drop - while the dialog is open.
         void BrowseForRom()
+        {
+            if (browsing) return;
+            browsing = true;
+            var th = new System.Threading.Thread(() =>
+            {
+                try { string p = PickFile(); if (!string.IsNullOrEmpty(p)) pendingPath = p; }
+                finally { browsing = false; }
+            }) { IsBackground = true, Name = "file picker" };
+            th.Start();
+        }
+
+        string PickFile()
         {
             string[][] attempts;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -492,32 +552,35 @@ namespace DigDug
                     {
                         string outp = proc.StandardOutput.ReadToEnd().Trim();
                         proc.WaitForExit();
-                        if (outp.Length > 0) { OnDrop(outp.Split('\n')[0].Trim()); return; }
-                        return;
+                        return outp.Length > 0 ? outp.Split('\n')[0].Trim() : null;
                     }
                 }
                 catch (Exception ex) { Log("file dialog '" + a[0] + "' unavailable: " + ex.Message); }
             }
+            romError = "NO FILE DIALOG - USE DRAG AND DROP";
+            return null;
         }
 
         void OnDrop(string path)
         {
             Log("drop/open: " + path);
             if (machine != null || string.IsNullOrEmpty(path)) return;
+            // a loose ROM file (not a .zip) dropped from an extracted set: use its folder
+            if (File.Exists(path) && !path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) path = Path.GetDirectoryName(path);
             try
             {
                 var roms = RomSet.Load(path);
                 cfg.RomPath = path; cfg.Save();
+                romError = null;
                 StartMachine(roms, null);
             }
             catch (Exception ex)
             {
                 Log("ROM load failed: " + ex);
-                if (Environment.GetEnvironmentVariable("DIGDUG_NOPROMPT") != null) return;
-                Sdl.SDL_ShowSimpleMessageBox(0x10, "Dig Dug", "That doesn't look like a complete Dig Dug ROM set:\n\n" + ex.Message, win);
+                string m = ex.Message;
+                romError = m.StartsWith("Missing ROM files") ? "ROM SET INCOMPLETE - TRY AGAIN" : "NOT A DIG DUG ROM SET";
             }
         }
-
         void OnKey(int sc)
         {
             if (machine == null) { if (sc == ScReturn || sc == ScKpEnter) BrowseForRom(); return; }
