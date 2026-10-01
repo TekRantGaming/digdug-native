@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Where do I get the ROMs?
+    url: https://github.com/TekRantGaming/digdug-native#getting-the-roms
+    about: This project cannot provide or link to ROM files. See the README for what you need.

@@ -116,6 +116,9 @@ namespace DigDug
             machine.Video.WantPfOnly = cfg.Widescreen;
             if (opts != null) Program.ApplyDipOptions(machine, opts);
             menuOpen = true; menuPausesGame = false; screen = Screen.Main; sel = 0;
+            if (shotMenu == "options") { screen = Screen.Options; sel = 1; }
+            else if (shotMenu == "controls") screen = Screen.Controls;
+            else if (shotMenu == "off") menuOpen = false;
             Sdl.SDL_SetWindowTitle(win, "Dig Dug");
         }
 
@@ -232,8 +235,8 @@ namespace DigDug
                 machine.Video.Render();
                 if (shotFrame > 0 && machine.FrameCount >= shotFrame)
                 {
-                    if (shotWide > W) { machine.Video.WantPfOnly = true; machine.Video.Render(); Png.Write(shotFile, ComposeWide(machine.Video.Pixels, shotWide), shotWide, H, 2); }
-                    else Png.Write(shotFile, machine.Video.Pixels, W, H, 2);
+                    if (shotWide > W) { machine.Video.WantPfOnly = true; machine.Video.Render(); Png.Write(shotFile, ComposeWide(BuildSource(), shotWide), shotWide, H, 2); }
+                    else Png.Write(shotFile, BuildSource(), W, H, 2);
                     Log("saved frame " + machine.FrameCount + " to " + shotFile);
                     shotFrame = 0; if (shotQuit) running = false;
                 }
@@ -270,7 +273,7 @@ namespace DigDug
         }
 
         // automated tests: --shot-at <frame> --shot-file <png> [--shot-quit]
-        long shotFrame; string shotFile; bool shotQuit; int shotWide;
+        long shotFrame; string shotFile; bool shotQuit; int shotWide; string shotMenu;
         void ConfigureShot(Dictionary<string, string> o)
         {
             string v;
@@ -278,6 +281,7 @@ namespace DigDug
             if (o != null && o.TryGetValue("shot-file", out v)) shotFile = v;
             shotQuit = o != null && o.ContainsKey("shot-quit");
             if (o != null && o.TryGetValue("shot-wide", out v)) int.TryParse(v, out shotWide);
+            if (o != null && o.TryGetValue("shot-menu", out v)) shotMenu = v;
             if (shotFile == null) shotFrame = 0;
         }
 
@@ -311,7 +315,8 @@ namespace DigDug
             Sdl.SDL_RenderPresent(ren);
         }
 
-        void Present()
+        // the 224x288 image to show: the game frame, or the dimmed game with the menu drawn over it
+        int[] BuildSource()
         {
             int[] src = machine.Video.Pixels;
             if (menuOpen)
@@ -320,6 +325,12 @@ namespace DigDug
                 DrawMenu();
                 src = frameBuf;
             }
+            return src;
+        }
+
+        void Present()
+        {
+            int[] src = BuildSource();
             int ow, oh; Sdl.SDL_GetRendererOutputSize(ren, out ow, out oh);
 
             // widescreen: extend the level sideways (dimmed, mirrored dirt) so wide screens aren't left with black bars;

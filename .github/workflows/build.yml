@@ -55,6 +55,15 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
+          name: Dig Dug native port ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            Native Windows and Linux builds of the Dig Dug arcade game. **You need your own Dig Dug ROM set** (MAME `digdug`) – none is included.
+
+            - **Windows (64-bit):** download `DigDug-windows-x64.zip`, extract, put your ROMs in a `roms` folder next to `DigDug.exe` (or pick `digdug.zip` when asked), run `DigDug.exe`.
+            - **Linux (x86-64):** download `DigDug-x86_64.AppImage`, `chmod +x` it, put `digdug.zip` beside it (or pick it when asked), run it.
+
+            See the [README](https://github.com/${{ github.repository }}#readme) for controls, options and troubleshooting.
           files: |
             dist/DigDug-windows-x64/DigDug-windows-x64.zip
             dist/DigDug-linux-x86_64/DigDug-x86_64.AppImage
