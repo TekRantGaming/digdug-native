@@ -48,3 +48,16 @@ GUI test hooks (the real window): `--at 2000:pad6:3` injects SDL controller butt
 3. Use `--trace06`, `--hit`, `--cov` and `--peek` to find where the game polls for something the emulation
    does not yet provide (this is how the 51xx credit/joystick format and the DIP byte layout were found).
 4. Verify each guess visually (`--shotframes`) or numerically (`--wav` analysis) before moving on.
+
+## Front-end test hooks
+
+The GUI program accepts a few switches for automated screenshots (no window and no sound are used when `--shot-file` is given, and nothing is written to the user's settings):
+
+```
+DigDug --roms <zip> --shot-at <frame> --shot-file out/x.png [--shot-size 1920x1080] [--shot-menu main|video|cheats|off] --shot-quit
+        [--set key=value ...]            override any settings.ini value for this run (e.g. --set theme=3 --set side_panels=4)
+        [--at frame:coin1|start1|fire|up|down|left|right[:frames]]   scripted input
+        [--at frame:keyN]                press hotkey with SDL scancode N (e.g. key62 = F5)
+```
+
+The front end is split into partial classes: `App.cs` (core loop, audio, window), `App.Input.cs`, `App.Video.cs`, `App.Menu.cs`, `App.Features.cs` (save states, rewind, replays, stats) and `App.Rom.cs` (ROM page).

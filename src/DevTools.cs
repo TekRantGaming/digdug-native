@@ -102,6 +102,11 @@ namespace DigDug
             for (int c = 0; c < 64; c++) for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
                         img[((c / 16) * 9 + y) * (16 * 9) + (c % 16) * 9 + x] = gray[v.CharPix[c * 64 + y * 8 + x] * 3];
             SavePng(img, 16 * 9, 4 * 9, 6, "out/chars_first64.png");
+            img = new int[16 * 9 * 4 * 9];
+            for (int i = 0; i < img.Length; i++) img[i] = unchecked((int)0xff203060);
+            for (int c = 0; c < 64; c++) for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                        img[((c / 16) * 9 + y) * (16 * 9) + (c % 16) * 9 + x] = gray[v.CharPix[(c + 64) * 64 + y * 8 + x] * 3];
+            SavePng(img, 16 * 9, 4 * 9, 6, "out/chars_second64.png");
             // palette swatches
             img = new int[32 * 16 * 16];
             for (int i = 0; i < 32; i++) for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) img[y * 512 + i * 16 + x] = v.Pal[i];
@@ -175,15 +180,48 @@ namespace DigDug
         }
 
         // --frames N [--out base] [--shotframes a,b,c] [--dip0 n --dip1 n] [--at frame:key:dur ...] [--trace06] [--log file]
+        static byte[] saved;
+
         public static void Headless(RomSet rs, Dictionary<string, string> o, List<string> scripted)
         {
             Directory.CreateDirectory("out");
             var m = new Machine(rs);
             Program.ApplyDipOptions(m, o);
             if (o.ContainsKey("nv")) m.LoadEarom(Settings.NvPath);
+            if (o.ContainsKey("cheat"))
+                foreach (var ch in o["cheat"].Split(','))
+                {
+                    if (ch == "lives") m.Cheats.InfiniteLives = true;
+                    else if (ch == "invincible") m.Cheats.Invincible = true;
+                    else if (ch.StartsWith("round=")) m.Cheats.StartRound = int.Parse(ch.Substring(6));
+                }
+            if (o.ContainsKey("statetest"))
+            {
+                // determinism check: save at frame A, run to B and hash RAM, load the state, run to B again and compare
+                var ab = o["statetest"].Split('-'); int fa = int.Parse(ab[0]), fb = int.Parse(ab[1]);
+                var mt = new Machine(rs); Program.ApplyDipOptions(mt, o);
+                Func<byte[]> hash = () => System.Security.Cryptography.SHA1.Create().ComputeHash(mt.SaveState());
+                for (int f = 1; f <= fb; f++)
+                {
+                    mt.Input.Coin1 = f >= 2000 && f < 2003; mt.Input.Start1 = f >= 2100 && f < 2105; mt.Input.Dir = (f / 90) % 2 == 0 ? 6 : 2; mt.Input.Fire = f % 40 < 20;
+                    if (f == fa + 1) { }
+                    mt.RunFrame();
+                    if (f == fa) { saved = mt.SaveState(); }
+                }
+                string h1 = BitConverter.ToString(hash());
+                mt.LoadState(saved);
+                for (int f = fa + 1; f <= fb; f++)
+                {
+                    mt.Input.Coin1 = f >= 2000 && f < 2003; mt.Input.Start1 = f >= 2100 && f < 2105; mt.Input.Dir = (f / 90) % 2 == 0 ? 6 : 2; mt.Input.Fire = f % 40 < 20;
+                    mt.RunFrame();
+                }
+                string h2 = BitConverter.ToString(hash());
+                Console.WriteLine("state test: " + (h1 == h2 ? "PASS (identical after reload)" : "FAIL") + "  state size " + saved.Length + " bytes");
+                return;
+            }
             if (o.ContainsKey("trace06")) m.Trace06 = true;
             if (o.ContainsKey("nopf")) m.Video.DbgNoPf = true;
-            if (o.ContainsKey("watch")) { var w = o["watch"].Split('-'); m.WatchLo = Convert.ToInt32(w[0], 16); m.WatchHi = Convert.ToInt32(w[1], 16); m.WatchFrom = o.ContainsKey("watchfrom") ? long.Parse(o["watchfrom"]) : 0; }
+            if (o.ContainsKey("watch")) { var w = o["watch"].Split('-'); m.WatchLo = Convert.ToInt32(w[0], 16); m.WatchHi = Convert.ToInt32(w[1], 16); m.WatchFrom = o.ContainsKey("watchfrom") ? long.Parse(o["watchfrom"]) : 0; if (o.ContainsKey("watchspan")) m.WatchSpan = long.Parse(o["watchspan"]); }
             if (o.ContainsKey("hit")) m.HitPc = Convert.ToInt32(o["hit"], 16);
             int frames = int.Parse(o["frames"]);
             string baseName = o.ContainsKey("out") ? o["out"] : "out/frame";
@@ -276,6 +314,138 @@ namespace DigDug
                     int addr = Convert.ToInt32(a, 16);
                     Console.WriteLine("peek " + a + " = " + m.Ram[addr - 0x8000].ToString("x2"));
                 }
+            if (o.ContainsKey("pfsheet"))
+            {
+                // all 256 playfield tiles on one sheet (colour from the tile's own code, as the map does)
+                var vv = m.Video; int cell = 9; var sheet = new int[16 * cell * 16 * cell];
+                for (int i = 0; i < sheet.Length; i++) sheet[i] = unchecked((int)0xff303030);
+                for (int c = 0; c < 256; c++)
+                    for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                    {
+                        int pen = vv.PfPix[c * 64 + y * 8 + x];
+                        int idx = rs.CharLut[(((c >> 4) & 0x3f) << 2 | pen) & 0xff] & 0x0f;
+                        sheet[((c / 16) * cell + y) * 16 * cell + (c % 16) * cell + x] = vv.Pal[idx];
+                    }
+                SavePng(sheet, 16 * cell, 16 * cell, 6, "out/pfsheet.png");
+                Console.WriteLine("wrote out/pfsheet.png");
+            }
+            if (o.ContainsKey("pfscore"))
+            {
+                // which 2bpp tile layout makes neighbouring map tiles join up best (dirt layers are smooth, so the right one scores highest)
+                byte[] raw = rs.PfGfx; byte[] map = rs.PfMap;
+                var res = new List<KeyValuePair<long, string>>();
+                for (int v = 0; v < 8; v++)
+                {
+                    var pens = new int[256][,];
+                    for (int c = 0; c < 256; c++)
+                    {
+                        pens[c] = new int[8, 8];
+                        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                        {
+                            int t = c * 16;
+                            int bytePos = (v & 1) == 0 ? t + y * 2 + (x >> 2) : t + (x >> 2) * 8 + y;
+                            int xi = x & 3; int b = raw[bytePos];
+                            int hi = (b >> ((v & 2) == 0 ? 7 - xi : 4 + xi)) & 1, lo = (b >> ((v & 2) == 0 ? 3 - xi : xi)) & 1;
+                            pens[c][x, y] = (v & 4) == 0 ? (hi << 1 | lo) : (lo << 1 | hi);
+                        }
+                    }
+                    for (int tr = 0; tr < 8; tr++)
+                    {
+                        Func<int, int, int, int> P = (c, x, y) =>
+                        {
+                            if ((tr & 1) != 0) x = 7 - x; if ((tr & 2) != 0) y = 7 - y;
+                            return (tr & 4) != 0 ? pens[c][y, x] : pens[c][x, y];
+                        };
+                        long score = 0;
+                        for (int page = 0; page < map.Length / 1024; page++)
+                            for (int row = 0; row < 32; row++)
+                                for (int col = 0; col < 32; col++)
+                                {
+                                    int a = map[page * 1024 + row * 32 + col];
+                                    if (col < 31) { int bb = map[page * 1024 + row * 32 + col + 1]; for (int k = 0; k < 8; k++) if (P(a, 7, k) == P(bb, 0, k)) score++; }
+                                    if (row < 31) { int bb = map[page * 1024 + (row + 1) * 32 + col]; for (int k = 0; k < 8; k++) if (P(a, k, 7) == P(bb, k, 0)) score++; }
+                                }
+                        res.Add(new KeyValuePair<long, string>(score, "layout " + v + " transform " + tr));
+                    }
+                }
+                res.Sort((p, q) => q.Key.CompareTo(p.Key));
+                for (int i = 0; i < 12; i++) Console.WriteLine(res[i].Value + " score " + res[i].Key);
+            }
+            if (o.ContainsKey("tileexp"))
+            {
+                // the lives icon = 2x2 tiles; render it in all 8 orientations
+                // try different raw tile layouts for the lives icon (pf tiles 0x10-0x13 laid out 2x2)
+                var vv = m.Video; int[] img = new int[8 * 18 * 18]; for (int i = 0; i < img.Length; i++) img[i] = unchecked((int)0xff303030);
+                int[,] layout = { { 0x11, 0x13 }, { 0x10, 0x12 } };
+                byte[] raw = rs.PfGfx;
+                for (int v = 0; v < 8; v++)
+                    for (int ty = 0; ty < 2; ty++) for (int tx = 0; tx < 2; tx++)
+                        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                        {
+                            int t = layout[ty, tx] * 16;
+                            int bytePos = (v & 1) == 0 ? t + y * 2 + (x >> 2) : t + (x >> 2) * 8 + y;      // row-pairs vs split halves
+                            int xi = x & 3; int b = raw[bytePos];
+                            int sh = (v & 2) == 0 ? 7 - xi : 4 + xi;                // MSB-first or LSB-first high nibble
+                            int p0 = (b >> sh) & 1, p1 = (b >> (sh - 4 < 0 ? 0 : 0)) & 0;                 // placeholder
+                            int hi = (b >> ((v & 2) == 0 ? 7 - xi : 4 + xi)) & 1, lo = (b >> ((v & 2) == 0 ? 3 - xi : xi)) & 1;
+                            int pen = (v & 4) == 0 ? (hi << 1 | lo) : (lo << 1 | hi);
+                            int idx = rs.CharLut[((1 << 2) | pen) & 0xff] & 0x0f;
+                            img[(1 + ty * 8 + y) * (8 * 18) + v * 18 + 1 + tx * 8 + x] = vv.Pal[idx];
+                        }
+                SavePng(img, 8 * 18, 18, 6, "out/tileexp.png");
+                // strip of tiles 0x00-0x1f in layout variant 1 (split halves, MSB-first, hi plane first), 3 in the second row set
+                {
+                    int cols = 16; var strip = new int[cols * 9 * 2 * 9]; for (int i = 0; i < strip.Length; i++) strip[i] = unchecked((int)0xff303030);
+                    for (int variant = 0; variant < 2; variant++)
+                        for (int tl = 0; tl < 16; tl++)
+                            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                            {
+                                int t = (tl + 16) * 16; int bytePos = t + (x >> 2) * 8 + y; int xi = x & 3; int b = raw[bytePos];
+                                int hi = (b >> (7 - xi)) & 1, lo = (b >> (3 - xi)) & 1;
+                                int pen = variant == 0 ? (hi << 1 | lo) : (lo << 1 | hi);
+                                int idx = rs.CharLut[((1 << 2) | pen) & 0xff] & 0x0f;
+                                strip[(variant * 9 + y) * (cols * 9) + tl * 9 + x] = vv.Pal[idx];
+                            }
+                    SavePng(strip, cols * 9, 18, 8, "out/tilestrip.png");
+                }
+                // smoothness score for each layout variant over the 4 icon tiles (neighbour-equal pixels, both directions)
+                for (int v = 0; v < 16; v++)
+                {
+                    int score = 0;
+                    foreach (int tile in new[] { 0x10, 0x11, 0x12, 0x13 })
+                    {
+                        var px = new int[8, 8];
+                        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                        {
+                            int t = tile * 16;
+                            int bytePos = (v & 1) == 0 ? t + y * 2 + (x >> 2) : t + (x >> 2) * 8 + y;
+                            int xi = x & 3; int b = raw[bytePos];
+                            int hi = (b >> ((v & 2) == 0 ? 7 - xi : 4 + xi)) & 1, lo = (b >> ((v & 2) == 0 ? 3 - xi : xi)) & 1;
+                            int pen = (v & 4) == 0 ? (hi << 1 | lo) : (lo << 1 | hi);
+                            if ((v & 8) != 0) px[x, y] = pen; else px[y, x] = pen;
+                        }
+                        for (int a = 0; a < 8; a++) for (int c = 0; c < 7; c++) { if (px[a, c] == px[a, c + 1]) score++; if (px[c, a] == px[c + 1, a]) score++; }
+                    }
+                    Console.WriteLine("variant " + v + " score " + score);
+                }
+                Console.WriteLine("wrote out/tileexp.png (variants 0-7 left to right)");
+            }
+            if (o.ContainsKey("pfcodes"))
+            {
+                Console.WriteLine("BgSelect=" + m.BgSelect + " BgColorBank=" + m.BgColorBank + " BgDisable=" + m.BgDisable + " TxColorMode=" + m.TxColorMode);
+                foreach (var cstr in o["pfcodes"].Split(','))
+                {
+                    int col = int.Parse(cstr);
+                    var sb2 = new System.Text.StringBuilder("pf col " + col + ": ");
+                    for (int row = 27; row >= 0; row--)
+                    {
+                        int row2 = row + 2, c2 = col - 2, ofs;
+                        if ((c2 & 0x20) != 0) ofs = row2 + ((c2 & 0x1f) << 5); else ofs = c2 + (row2 << 5);
+                        sb2.Append(rs.PfMap[(ofs & 0x3ff) | (m.BgSelect << 10)].ToString("x2")).Append(' ');
+                    }
+                    Console.WriteLine(sb2.ToString());
+                }
+            }
             if (o.ContainsKey("text")) Console.Write(ScreenText(m));
             if (o.ContainsKey("hex")) Console.Write(ScreenHex(m, int.Parse(o["hex"])));
             if (o.ContainsKey("spr"))

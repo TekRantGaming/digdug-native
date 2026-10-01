@@ -30,6 +30,7 @@ namespace DigDug
             string romPath = null;
             var opts = new Dictionary<string, string>();
             var scripted = new List<string>();
+            var overrides = new List<string>();
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i].StartsWith("--"))
@@ -38,6 +39,7 @@ namespace DigDug
                     string v = "1";
                     if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) v = args[++i];
                     if (name == "at") scripted.Add(v);
+                    if (name == "set") overrides.Add(v);
                     opts[name] = v;
                 }
                 else if (romPath == null) romPath = args[i];
@@ -81,7 +83,9 @@ namespace DigDug
             string v2;
             if (opts.TryGetValue("lives", out v2)) { int n; if (int.TryParse(v2, out n) && Array.IndexOf(Settings.LivesValues, n) >= 0) cfg.Lives = n; }
             if (opts.TryGetValue("rank", out v2) && v2.Length > 0) cfg.Rank = Math.Max(0, Math.Min(3, char.ToUpperInvariant(v2[0]) - 'A'));
+            if (opts.ContainsKey("shot-file") || opts.ContainsKey("nosave")) Settings.NoSave = true;   // test runs never touch the user's files
             var app = new App(cfg);
+            app.Overrides.AddRange(overrides);
             foreach (var s in scripted) app.Script.Add(s.Split(':'));
             return app.Run(roms, opts);
         }

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0
+
+A big feature update.
+
+**Fixes**
+- Lives icons and the dirt layers were drawn wrongly (playfield tile halves swapped): the icons now look right and the stray lines in the dirt are gone
+
+**New**
+- Hierarchical menu: Video, Audio, Controls, Game, Cheats, Save states, Extras, Stats, About
+- Cheats: infinite lives, invincibility, start round
+- Save states (5 slots), rewind (hold R, 15 s), replay recording and playback
+- 14 colour themes incl. colour-blind palettes; scanlines, RGB mask, vignette; rotation; sharp/fit/stretch scaling
+- Widescreen side panels: dirt, black, glow, live sound scopes, info panel
+- Rebindable keys, pump-button choice, stick deadzone, rumble
+- Game speed (25-400%), frame advance, per-voice mute, sound smoothing, FPS counter, VSync / borderless / always-on-top, auto pause on focus loss
+- Statistics and 19 achievements (local only), screenshots (F12), reset high scores / stats
 ## 1.0.0
 
 Initial release.

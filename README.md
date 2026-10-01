@@ -8,7 +8,9 @@
 [![release](https://img.shields.io/github/v/release/TekRantGaming/digdug-native)](https://github.com/TekRantGaming/digdug-native/releases/latest)
 [![license](https://img.shields.io/badge/code-MIT-blue)](LICENSE)
 
-<img src="docs/images/gameplay.png" width="260" alt="Gameplay"> <img src="docs/images/title.png" width="260" alt="Title screen"> <img src="docs/images/menu.png" width="260" alt="In-game menu">
+<img src="docs/images/gameplay.png" width="260" alt="Gameplay"> <img src="docs/images/menu.png" width="260" alt="Main menu"> <img src="docs/images/menu-video.png" width="260" alt="Video menu">
+
+<img src="docs/images/widescreen-scope.png" width="800" alt="Widescreen with live sound scopes">
 
 </div>
 
@@ -50,28 +52,52 @@ and packaging as a self-contained `.exe` and a Linux **AppImage** (no RetroArch 
 
 ## Features
 
+**Play**
 - **Faithful gameplay** – attract mode, credits, scoring, pump, rocks, enemy AI, round progression, high-score memory
-- **Game controller support** – Xbox 360 / One / Series, PlayStation 4 (DualShock 4) and PlayStation 5 (DualSense),
-  Switch Pro and most other gamepads, with hot-plugging (via SDL's controller database)
-- **In-game menu** (Esc, or the PS / Guide button) – fullscreen, window size, sharp or smooth scaling, volume,
-  **audio device picker**, lives, bonus-life thresholds, difficulty rank, auto-coin, auto-pump, widescreen
-- **Widescreen fill** – on 16:9 and wider screens the dirt is extended to the sides instead of leaving big black bars,
-  with a clear frame marking the real playfield edge
-- **Auto pump** – hold fire and the pump keeps inflating (the arcade game wants release-and-press for every pump step)
-- **Auto coin** – just press Start; no need to insert a coin first
-- **Windows `.exe` and Linux AppImage**, fast-forward (hold Tab), pause, persistent settings and high scores
-- The ~30-second power-on self-test is fast-forwarded automatically
-- No installer, no runtime to install: the downloads are self-contained
+- **Auto pump** and **auto coin** – hold fire to keep pumping; just press Start
+- **Game controller support** – Xbox 360 / One / Series, PlayStation 4/5, Switch Pro and most gamepads, hot-plugging, rumble when you lose a life, adjustable deadzone and pump button
+- **Rebindable keyboard** – two keys per action, set in the menu
+- **Cheats** – infinite lives, invincibility, start on any round (applied live; the ROM is never modified)
+- **Game speed** from 25% to 400%, frame advance while paused, hold **Tab** to fast-forward
+- Difficulty options: lives, bonus-life thresholds, rank A–D
+
+**Time machine**
+- **Save states** – 5 slots (F5 save, F7 load, F6 change slot)
+- **Rewind** – hold R (or L3) to run the game backwards for up to 15 seconds
+- **Replays** – record a game and play it back exactly, from the menu
+
+**Video**
+- **Widescreen fill** with five side-panel styles: dirt, black, glow, **live sound oscilloscopes** and an **info panel** (stats and key help); a bright line always marks the real playfield
+- **14 colour themes** including green phosphor, amber, Game Boy, sepia, night mode and two **colour-blind** palettes
+- **CRT filters** – scanlines (3 strengths, optional arcade-accurate sideways direction), RGB phosphor mask, vignette
+- **Rotation** (play on a tilted monitor), sharp / fit / stretch scaling, smooth filter, VSync, borderless, always-on-top
+- FPS counter, notices for saves / screenshots / achievements
+
+**Audio**
+- Output device picker with test tone, volume, **per-voice mute** for the three sound channels, optional smoothing, mute when unfocused
+
+**Extras**
+- **Statistics** (play time, games, coins, lives lost, best score, deepest round) and **19 achievements**, stored locally – nothing is ever sent anywhere
+- **Screenshots** (F12) saved as PNG, shortcuts to open the config and screenshot folders
+- Reset high scores / stats, automatic pause when the window loses focus
+- Windows `.exe` and Linux AppImage, no installer or runtime needed; the power-on self-test is fast-forwarded
 
 <details>
 <summary>More screenshots</summary>
 
-| Options | Widescreen (16:9) |
+| CRT filter | Rotation + Green Phosphor theme |
 |---|---|
-| <img src="docs/images/options.png" width="300"> | <img src="docs/images/widescreen.png" width="520"> |
+| <img src="docs/images/crt-filter.png" width="300"> | <img src="docs/images/rotated-green.png" width="420"> |
+
+| Info panel (16:9) | Dirt panels (16:9) |
+|---|---|
+| <img src="docs/images/widescreen-info.png" width="420"> | <img src="docs/images/widescreen.png" width="420"> |
+
+| Cheats menu | Notices, FPS counter |
+|---|---|
+| <img src="docs/images/menu-cheats.png" width="260"> | <img src="docs/images/hud-toasts.png" width="260"> |
 
 </details>
-
 ## Download and run
 
 Grab the latest build from the **[Releases](https://github.com/TekRantGaming/digdug-native/releases/latest)** page.
@@ -113,48 +139,52 @@ If nothing is found, the window shows a **"ROM files required"** page: **drag an
 
 ## Controls
 
-| Action | Keyboard | Controller |
+| Action | Keyboard (defaults, rebindable) | Controller |
 |---|---|---|
 | Move | Arrow keys / WASD | D-pad or left stick |
-| Pump (hold to keep pumping) | Space / Ctrl / Z / X | A, B, X, Y, R1 or either trigger |
+| Pump (hold to keep pumping) | Space / Z | A, B, X, Y, R1 or either trigger (choose in menu) |
 | Insert coin | 5 / C | Back / Select / Share (or just press Start – *Auto coin*) |
 | 1-player start | 1 / Enter | Start / Options |
 | 2-player start | 2 | L1 |
 | Menu | Esc / F1 | PS / Guide button, or press the right stick (R3) |
-| Fullscreen | F11 / F | menu |
-| Pause / fast-forward | P / hold Tab | – |
+| Pause / frame advance | P / `.` while paused | – |
+| Fast-forward | hold Tab | – |
+| Rewind | hold R | hold L3 (left stick click) |
+| Save / load / change state slot | F5 / F7 / F6 | menu |
+| Game speed | `[` slower, `]` faster, `\` reset | menu |
+| Colour theme / scanlines / FPS | F10 / F8 / F9 | menu |
+| Fullscreen / screenshot | F11 / F12 | menu |
 | Reset machine | F3 | menu |
 | Service/test screen | hold F2 while booting | – |
 
-## The menu and options
+## The menu
 
-Open it with **Esc** (or the PS / Guide button). Navigate with the arrow keys or D-pad, change values with
-Left/Right, confirm with Enter or A.
+Open it with **Esc** (or the PS / Guide button). Navigate with the arrow keys or D-pad, change values with Left/Right,
+confirm with Enter or A, go back with Esc or B. Pages:
 
-| Option | Description |
+| Page | What is in it |
 |---|---|
-| Fullscreen | Borderless fullscreen (also F11) |
-| Window size | Auto, or 1x-8x the original resolution |
-| Scaling | *Sharp* = whole-number scale factors only; *Fit* = fill as much of the window as possible |
-| Filter | *Pixels* (crisp) or *Smooth* (bilinear) |
-| Volume / Audio / Test sound | Output volume and **output device selection** with a test tone |
-| Lives / Bonus / Rank | The arcade DIP-switch settings: 1/2/3/5 lives, bonus-life thresholds, difficulty A-D |
-| Auto coin | Pressing Start with no credit inserts one automatically |
-| Auto pump | Holding fire pumps continuously |
-| Widescreen | Extend the playfield on wide windows |
+| **Video** | Fullscreen, window size, scaling, smooth filter, widescreen + side panels, rotation, theme, scanlines + direction, CRT mask, vignette, VSync, FPS, always-on-top, borderless |
+| **Audio** | Volume, output device + test tone, mute each of the 3 voices, smoothing, mute in background |
+| **Controls** | Rebind every key (Enter = key 1, Left/Right = key 2), pump button, stick deadzone, rumble, auto pump |
+| **Game** | Lives, bonus, rank, auto coin, add credit, game speed, auto pause |
+| **Cheats** | Infinite lives, invincibility, start round |
+| **Save states** | Slots, save / load, rewind info, record / play replays |
+| **Extras** | Screenshot, open folders, reset high scores / stats |
+| **Stats** | Play statistics and the achievements list |
 
 Settings are saved to `%APPDATA%\DigDugNative\settings.ini` (`~/.config/DigDugNative/settings.ini` on Linux) along
-with the high-score memory (`digdug.nv`) and a small `digdug.log` listing the detected audio devices and controllers.
+with the high-score memory (`digdug.nv`), `stats.ini`, a `digdug.log`, and the `states`, `replays` and `screenshots` folders.
 
 ## Widescreen mode
 
-Dig Dug was designed for a **vertical (3:4) monitor**. On a modern 16:9 display that leaves wide black bars. In widescreen
-mode the dirt layers and sky are extended to the left and right (dimmed, so it is obvious they are decoration). A bright
-frame line marks the **real playfield edges** – you cannot walk or dig beyond it, and gameplay is completely unchanged.
-Turn it off in *Options -> Widescreen* if you prefer black bars.
+Dig Dug was designed for a **vertical (3:4) monitor**. On a modern 16:9 display that leaves wide black bars. Widescreen
+mode fills them; choose the look under *Video -> Side panels*: **dirt** (extended, dimmed level), **black**, **glow**
+(the screen edge colours bleed outward), **scope** (live oscilloscope of each sound voice) or **info** (stats and key help).
+A bright line marks the **real playfield edges** – you cannot walk or dig beyond it, and gameplay is completely unchanged.
+Turn widescreen off if you prefer plain bars, or use *Rotation* to play sideways on a landscape display.
 
 <p align="center"><img src="docs/images/widescreen.png" width="640" alt="Widescreen mode"></p>
-
 ## Command line
 
 ```
@@ -202,7 +232,7 @@ GitHub Actions builds both packages on every push, and a tag starting with `v` p
 
 **The game started without asking for a ROM - where did it get one?** The program contains no game data; it can only use a ROM set it found on your PC. The menu's bottom line ("ROMS ...") and `digdug.log` say exactly where it was loaded from, and `DigDug.exe --rom-status` prints the same (exit code 3 = none found). The usual cause is a remembered path in `settings.ini` (delete it to forget) or a ROM set next to the program or in the config folder.
 
-**No sound.** Open the menu -> Options -> **Audio** and choose another output device; a test tone plays each time you
+**No sound.** Open the menu -> **Audio** and choose another output device; a test tone plays each time you
 change it. Systems with virtual mixers (for example SteelSeries Sonar or Voicemeeter) can send new programs to a channel
 you aren't listening to. `digdug.log` lists every output device SDL can see.
 
@@ -236,7 +266,7 @@ widescreen mode and controller support – is original work in this repository.
   51xx (credits/joystick) and 53xx (DIP switch) chips
 - `Video` – 36x28 tile playfield, text layer and 64 sprites rendered at 288x224 then rotated for the vertical monitor
 - `Sound` – the Namco 3-voice wavetable chip
-- `App` / `Sdl` – SDL2 front end: window, scaling, widescreen, input, audio, menu
+- `App*` / `Sdl` – SDL2 front end: window, scaling, widescreen, CRT filters, input, audio, menu, save states, rewind, replays
 
 More detail in [`docs/HARDWARE.md`](docs/HARDWARE.md) and [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
@@ -248,7 +278,10 @@ src/Machine.cs      Board: memory map, interrupts, latches, 06xx bus, 51xx/53xx 
 src/Video.cs        Playfield / text / sprite renderer, palette PROMs, 90° rotation
 src/Sound.cs        Namco 3-voice wavetable synthesiser
 src/RomSet.cs       ROM loader (folder or zip)
-src/App.cs          SDL2 front end: window, input, audio, menu, widescreen
+src/App*.cs         SDL2 front end (core, input, video, menu, features, ROM page)
+src/Themes.cs       Colour themes
+src/Stats.cs        Statistics and achievements
+src/Cheats.cs       Cheat hooks
 src/Sdl.cs          Minimal SDL2 bindings
 src/Settings.cs     Persistent settings
 src/Disasm.cs, DevTools.cs, Bot.cs, Png.cs   Developer tools

@@ -107,6 +107,21 @@ namespace DigDug
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_GetNumAudioDevices(int capture);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr SDL_GetAudioDeviceName(int index, int capture);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_PushEvent(IntPtr ev);
+        // rendering extras: rotation, overlays, offscreen targets (for screenshots), window features, rumble, key names
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_RenderCopyEx(IntPtr r, IntPtr tex, IntPtr src, ref SdlRect dst, double angle, IntPtr center, int flip);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_SetTextureBlendMode(IntPtr tex, int mode);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_SetTextureScaleMode(IntPtr tex, int mode);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_SetRenderTarget(IntPtr r, IntPtr tex);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_RenderReadPixels(IntPtr r, IntPtr rect, uint format, IntPtr pixels, int pitch);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern void SDL_SetWindowBordered(IntPtr win, int bordered);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern void SDL_SetWindowAlwaysOnTop(IntPtr win, int onTop);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_RenderSetVSync(IntPtr r, int vsync);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] public static extern int SDL_GameControllerRumble(IntPtr pad, ushort low, ushort high, uint ms);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr SDL_GetScancodeName(int sc);
+        public const int BlendModeBlend = 1, TextureAccessTarget = 2, ScaleNearest = 0, ScaleLinear = 1;
+        public const int EvWindowFocusGained = 12, EvWindowFocusLost = 13;
+        public static string ScancodeName(int sc) { return sc <= 0 ? "NONE" : (Marshal.PtrToStringUTF8(SDL_GetScancodeName(sc)) ?? "?"); }
+
         public static string AudioDriver() { return Marshal.PtrToStringUTF8(SDL_GetCurrentAudioDriver()) ?? "?"; }
         public static string Error() { return Marshal.PtrToStringUTF8(SDL_GetError()) ?? ""; }
         public static string ControllerName(IntPtr pad) { return Marshal.PtrToStringUTF8(SDL_GameControllerName(pad)) ?? "Controller"; }

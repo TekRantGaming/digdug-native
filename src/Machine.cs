@@ -43,9 +43,61 @@ namespace DigDug
         public bool Trace06;
         public int HitPc = -1, HitCount;
         public bool[] Cov;
-        public int WatchLo, WatchHi; public long WatchFrom;
+        public int WatchLo, WatchHi; public long WatchFrom; public long WatchSpan = 700;
         public long FrameCount;
         readonly int[] budget = new int[3];
+        public readonly Cheats Cheats = new Cheats();
+        public int Deaths;      // lives lost since power-on (statistics / rumble)
+
+        /// <summary>True while a game is being played (not attract mode or the title screens).</summary>
+        public bool InGame { get { return (Ram[0x400] & 0x80) != 0; } }
+        public int Round { get { return Ram[0x40d]; } }
+        public int LivesLeft { get { return Ram[0x40a]; } }
+
+        // ------------------------------------------------------------------ save states
+        const uint StateMagic = 0x54534444; // "DDST"
+
+        public byte[] SaveState()
+        {
+            var ms = new MemoryStream(9500);
+            using (var w = new BinaryWriter(ms))
+            {
+                w.Write(StateMagic); w.Write(1);
+                w.Write(FrameCount);
+                w.Write(Ram); w.Write(Earom);
+                foreach (int b in budget) w.Write(b);
+                w.Write(irqMask0); w.Write(irqMask1); w.Write(subNmiEnable); w.Write(subsRunning);
+                w.Write(BgSelect); w.Write(BgColorBank); w.Write(TxColorMode); w.Write(BgDisable); w.Write(Flip);
+                w.Write(ctrl06); w.Write(nmiTimer); w.Write(nmiCycles);
+                for (int i = 0; i < 3; i++) Cpu[i].Save(w);
+                Chip51.Save(w); Chip53.Save(w);
+                Sound.Save(w);
+                w.Flush();
+                return ms.ToArray();
+            }
+        }
+
+        public bool LoadState(byte[] data)
+        {
+            try
+            {
+                using (var r = new BinaryReader(new MemoryStream(data)))
+                {
+                    if (r.ReadUInt32() != StateMagic || r.ReadInt32() != 1) return false;
+                    FrameCount = r.ReadInt64();
+                    r.Read(Ram, 0, Ram.Length); r.Read(Earom, 0, Earom.Length);
+                    for (int i = 0; i < 3; i++) budget[i] = r.ReadInt32();
+                    irqMask0 = r.ReadBoolean(); irqMask1 = r.ReadBoolean(); subNmiEnable = r.ReadBoolean(); subsRunning = r.ReadBoolean();
+                    BgSelect = r.ReadInt32(); BgColorBank = r.ReadInt32(); TxColorMode = r.ReadBoolean(); BgDisable = r.ReadBoolean(); Flip = r.ReadBoolean();
+                    ctrl06 = r.ReadInt32(); nmiTimer = r.ReadBoolean(); nmiCycles = r.ReadInt32();
+                    for (int i = 0; i < 3; i++) Cpu[i].Load(r);
+                    Chip51.Load(r); Chip53.Load(r);
+                    Sound.Load(r);
+                    return true;
+                }
+            }
+            catch { return false; }
+        }
 
         public Machine(RomSet roms)
         {
@@ -83,8 +135,17 @@ namespace DigDug
                 budget[0] += CyclesPerLine;
                 while (budget[0] > 0)
                 {
-                    if (Cpu[0].PC == HitPc) HitCount++;
-                    if (Cov != null) Cov[Cpu[0].PC] = true;
+                    int pc = Cpu[0].PC;
+                    if (pc == HitPc) HitCount++;
+                    if (Cov != null) Cov[pc] = true;
+                    // hook points in the main program (used for cheats and statistics)
+                    switch (pc)
+                    {
+                        case 0x1b8c: Deaths++; if (Cheats.InfiniteLives) Cpu[0].PC = 0x1b8d; break;          // lose a life: skip the decrement
+                        case 0x1395: if (Cheats.Invincible) Cpu[0].PC = 0x13ff; break;                       // enemy touches player: ignore
+                        case 0x19ad: if (Cheats.StartRound > 1 && Ram[0x40d] == 0) Ram[0x40d] = (byte)(Cheats.StartRound - 1); break;   // P1 round counter
+                        case 0x19b9: if (Cheats.StartRound > 1 && Ram[0x40e] == 0) Ram[0x40e] = (byte)(Cheats.StartRound - 1); break;   // P2 round counter
+                    }
                     int c = Cpu[0].Step();
                     budget[0] -= c;
                     if (nmiTimer) { nmiCycles += c; if (nmiCycles >= Nmi06Period) { nmiCycles -= Nmi06Period; Cpu[0].NmiPending = true; } }
@@ -182,8 +243,8 @@ namespace DigDug
                 a &= 0xffff; v &= 0xff;
                 if (a >= 0x8000 && a < 0xa000)
                 {
-                    if (m.WatchLo > 0 && a >= m.WatchLo && a <= m.WatchHi && m.FrameCount >= m.WatchFrom && m.FrameCount < m.WatchFrom + 700)
-                        Console.WriteLine("f" + m.FrameCount + " cpu" + (id + 1) + " pc=" + m.Cpu[id].PC.ToString("x4") + " ["+a.ToString("x4")+"]=" + v.ToString("x2"));
+                    if (m.WatchLo > 0 && a >= m.WatchLo && a <= m.WatchHi && m.FrameCount >= m.WatchFrom && m.FrameCount < m.WatchFrom + m.WatchSpan && m.Ram[a - 0x8000] != v)
+                        Console.WriteLine("f" + m.FrameCount + " cpu" + (id + 1) + " pc=" + m.Cpu[id].PC.ToString("x4") + " [" + a.ToString("x4") + "] " + m.Ram[a - 0x8000].ToString("x2") + "->" + v.ToString("x2"));
                     m.Ram[a - 0x8000] = (byte)v; return;
                 }
                 if (a >= 0x6800 && a < 0x6820) { m.Sound.Write(a - 0x6800, v); return; }
@@ -214,6 +275,28 @@ namespace DigDug
         bool lastCoin1, lastCoin2, lastStart1, lastStart2, lastFire, fireHeld, fireEdge;
 
         public Namco51(Machine mm) { m = mm; }
+
+        public int Credits { get { return credits; } }
+        public void AddCredits(int n) { credits = Math.Min(99, credits + n); }
+
+        public void Save(BinaryWriter w)
+        {
+            w.Write(mode); w.Write(coinageLeft); w.Write(coinIdx);
+            foreach (int c in coinage) w.Write(c);
+            w.Write(credits); w.Write(coins[0]); w.Write(coins[1]);
+            w.Write(readIdx); w.Write(pendingStart); w.Write(pendingDelay);
+            w.Write(lastCoin1); w.Write(lastCoin2); w.Write(lastStart1); w.Write(lastStart2); w.Write(lastFire); w.Write(fireHeld); w.Write(fireEdge);
+        }
+
+        public void Load(BinaryReader r)
+        {
+            mode = r.ReadInt32(); coinageLeft = r.ReadInt32(); coinIdx = r.ReadInt32();
+            for (int i = 0; i < 4; i++) coinage[i] = r.ReadInt32();
+            credits = r.ReadInt32(); coins[0] = r.ReadInt32(); coins[1] = r.ReadInt32();
+            readIdx = r.ReadInt32(); pendingStart = r.ReadInt32(); pendingDelay = r.ReadInt32();
+            lastCoin1 = r.ReadBoolean(); lastCoin2 = r.ReadBoolean(); lastStart1 = r.ReadBoolean(); lastStart2 = r.ReadBoolean();
+            lastFire = r.ReadBoolean(); fireHeld = r.ReadBoolean(); fireEdge = r.ReadBoolean();
+        }
 
         public void BeginRead() { readIdx = 0; }
 
@@ -320,6 +403,8 @@ namespace DigDug
         readonly Machine m;
         int idx;
         public Namco53(Machine mm) { m = mm; }
+        public void Save(BinaryWriter w) { w.Write(idx); }
+        public void Load(BinaryReader r) { idx = r.ReadInt32(); }
         public void BeginRead() { idx = 0; }
         public int Read() { return (idx++ & 1) == 0 ? m.Dip0 : m.Dip1; }
     }

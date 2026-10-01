@@ -23,17 +23,28 @@ namespace DigDug
         {
             m = mm;
             var r = mm.Roms;
-            for (int i = 0; i < 32; i++)
-            {
-                int b = r.PalProm[i];
-                int R = 0x21 * (b & 1) + 0x47 * ((b >> 1) & 1) + 0x97 * ((b >> 2) & 1);
-                int G = 0x21 * ((b >> 3) & 1) + 0x47 * ((b >> 4) & 1) + 0x97 * ((b >> 5) & 1);
-                int B = 0x51 * ((b >> 6) & 1) + 0xae * ((b >> 7) & 1);
-                Pal[i] = (255 << 24) | (R << 16) | (G << 8) | B;
-            }
+            SetTheme(0);
             DecodeChars(r.CharGfx);
             DecodePf(r.PfGfx);
             DecodeSprites(r.SpriteGfx);
+        }
+
+        public int Theme { get; private set; }
+
+        /// <summary>Rebuilds the 32-colour palette from the colour PROM, passed through a colour theme.</summary>
+        public void SetTheme(int theme)
+        {
+            Theme = theme;
+            var prom = m.Roms.PalProm;
+            for (int i = 0; i < 32; i++)
+            {
+                int b = prom[i];
+                int R = 0x21 * (b & 1) + 0x47 * ((b >> 1) & 1) + 0x97 * ((b >> 2) & 1);
+                int G = 0x21 * ((b >> 3) & 1) + 0x47 * ((b >> 4) & 1) + 0x97 * ((b >> 5) & 1);
+                int B = 0x51 * ((b >> 6) & 1) + 0xae * ((b >> 7) & 1);
+                Themes.Apply(theme, ref R, ref G, ref B);
+                Pal[i] = (255 << 24) | (R << 16) | (G << 8) | B;
+            }
         }
 
         // MAME-style bit addressing: bit offset n -> (byte[n/8] >> (7 - n%8)) & 1
@@ -49,12 +60,13 @@ namespace DigDug
 
         void DecodePf(byte[] d)
         {
-            int[] xo = { 0, 1, 2, 3, 8, 9, 10, 11 };
+            // 16 bytes per tile, laid out like the sprites: bytes 0-7 hold the left 4 pixels of each row, bytes 8-15 the
+            // right 4; within a byte the high nibble is plane 1 and the low nibble plane 0
             for (int c = 0; c < 256; c++)
                 for (int y = 0; y < 8; y++)
                     for (int x = 0; x < 8; x++)
                     {
-                        int b = c * 128 + y * 16 + xo[x];
+                        int b = c * 128 + ((x >> 2) ^ 1) * 64 + y * 8 + (x & 3);
                         PfPix[c * 64 + y * 8 + x] = (byte)(Bit(d, b) << 1 | Bit(d, b + 4));
                     }
         }

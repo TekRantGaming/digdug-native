@@ -49,6 +49,21 @@ namespace DigDug
             IFF1 = IFF2 = false; IM = 0; Halted = false; IrqLine = false; NmiPending = false; eiDelay = false;
         }
 
+        public void Save(System.IO.BinaryWriter w)
+        {
+            foreach (int v in new[] { A, F, B, C, D, E, H, L, A2, F2, B2, C2, D2, E2, H2, L2, IX, IY, SP, PC, I, R, IM }) w.Write(v);
+            w.Write(IFF1); w.Write(IFF2); w.Write(Halted); w.Write(IrqLine); w.Write(NmiPending); w.Write(eiDelay);
+        }
+
+        public void Load(System.IO.BinaryReader r)
+        {
+            A = r.ReadInt32(); F = r.ReadInt32(); B = r.ReadInt32(); C = r.ReadInt32(); D = r.ReadInt32(); E = r.ReadInt32(); H = r.ReadInt32(); L = r.ReadInt32();
+            A2 = r.ReadInt32(); F2 = r.ReadInt32(); B2 = r.ReadInt32(); C2 = r.ReadInt32(); D2 = r.ReadInt32(); E2 = r.ReadInt32(); H2 = r.ReadInt32(); L2 = r.ReadInt32();
+            IX = r.ReadInt32(); IY = r.ReadInt32(); SP = r.ReadInt32(); PC = r.ReadInt32(); I = r.ReadInt32(); R = r.ReadInt32(); IM = r.ReadInt32();
+            IFF1 = r.ReadBoolean(); IFF2 = r.ReadBoolean(); Halted = r.ReadBoolean(); IrqLine = r.ReadBoolean(); NmiPending = r.ReadBoolean(); eiDelay = r.ReadBoolean();
+            pfx = 0; cyc = 0;
+        }
+
         int BC { get { return B << 8 | C; } set { B = (value >> 8) & 255; C = value & 255; } }
         int DE { get { return D << 8 | E; } set { D = (value >> 8) & 255; E = value & 255; } }
         int HL { get { return H << 8 | L; } set { H = (value >> 8) & 255; L = value & 255; } }

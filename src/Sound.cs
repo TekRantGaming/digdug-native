@@ -1,16 +1,28 @@
 // Namco 3-voice wavetable sound generator (as used on Pac-Man / Dig Dug), 96 kHz native, rendered at 48 kHz.
 using System;
+using System.IO;
 
 namespace DigDug
 {
     public sealed class Sound
     {
         public const int SampleRate = 48000;
+        public const int ScopeLen = 256;
         readonly int[] regs = new int[0x20];
         readonly int[,] wave = new int[8, 32];
         readonly int[] freq = new int[3], vol = new int[3], sel = new int[3];
         readonly uint[] counter = new uint[3];
         readonly object gate = new object();
+
+        // player-facing options
+        public int MuteMask;            // bit n set = voice n silenced
+        public bool Smooth;             // gentle low-pass filter (softens the harsh 4-bit steps)
+        float lp;
+
+        // oscilloscope data for the on-screen visualiser: the last ScopeLen output samples of each voice
+        public readonly short[][] Scope = { new short[ScopeLen], new short[ScopeLen], new short[ScopeLen] };
+        int scopePos;
+        public int[] Volumes { get { return vol; } }
 
         public Sound(byte[] wavProm)
         {
@@ -57,12 +69,38 @@ namespace DigDug
                     int s = 0;
                     for (int v = 0; v < 3; v++)
                     {
-                        if (vol[v] == 0) continue;
-                        counter[v] += (uint)(freq[v] * 2); // 96 kHz native -> 48 kHz
-                        s += wave[sel[v], (int)((counter[v] >> 15) & 0x1f)] * vol[v];
+                        int o = 0;
+                        if (vol[v] != 0)
+                        {
+                            counter[v] += (uint)(freq[v] * 2); // 96 kHz native -> 48 kHz
+                            o = wave[sel[v], (int)((counter[v] >> 15) & 0x1f)] * vol[v];
+                        }
+                        if ((n & 3) == 0) Scope[v][(scopePos + (n >> 2)) % ScopeLen] = (short)(o * 80);
+                        if ((MuteMask & (1 << v)) == 0) s += o;
                     }
-                    buf[offset + n] = (short)(s * 80);
+                    float x = s * 80;
+                    if (Smooth) { lp += 0.35f * (x - lp); x = lp; }
+                    buf[offset + n] = (short)x;
                 }
+                scopePos = (scopePos + (count >> 2)) % ScopeLen;
+            }
+        }
+
+        public void Save(BinaryWriter w)
+        {
+            lock (gate)
+            {
+                foreach (int v in regs) w.Write(v);
+                for (int i = 0; i < 3; i++) { w.Write(freq[i]); w.Write(vol[i]); w.Write(sel[i]); w.Write(counter[i]); }
+            }
+        }
+
+        public void Load(BinaryReader r)
+        {
+            lock (gate)
+            {
+                for (int i = 0; i < regs.Length; i++) regs[i] = r.ReadInt32();
+                for (int i = 0; i < 3; i++) { freq[i] = r.ReadInt32(); vol[i] = r.ReadInt32(); sel[i] = r.ReadInt32(); counter[i] = r.ReadUInt32(); }
             }
         }
     }
