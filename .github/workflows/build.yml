@@ -86,6 +86,7 @@ jobs:
           generate_release_notes: true
           body: |
             Native Windows and Linux builds of the Dig Dug arcade game. **You need your own Dig Dug ROM set** (MAME `digdug`) – none is included, and the build fails if any ROM-like file is found in a package.
+
             AI disclosure: this project was created with AI. It may contain errors.
 
             - **Windows (64-bit):** download `DigDug-windows-x64.zip`, extract, put your ROMs in a `roms` folder next to `DigDug.exe` (or pick `digdug.zip` when asked), run `DigDug.exe`.
