@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3
+
+- Added `--rom-status` (reports whether/where a ROM set was found; exit code 3 = none) and the menu now shows where the ROMs were loaded from; the startup details are written to `digdug.log`
+- CI now runs the packaged Windows exe and the AppImage on a clean machine and fails the build if they find a ROM set
+- ROM discovery narrowed to documented locations only (given path, remembered path, next to the program/AppImage, config folder); parent folders and the working directory are no longer searched
+
 ## 1.0.2
 
 - Fixed drag-and-drop of the ROM zip: the start-up ROM prompt no longer uses a blocking dialog. An on-screen page (with a built-in font) is shown instead, the file picker runs on a background thread, and bad drops show an error on the page

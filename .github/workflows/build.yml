@@ -29,6 +29,13 @@ jobs:
           bash packaging/check-no-roms.sh repo-files.txt
           unzip -Z1 DigDug-windows-x64.zip > zip-files.txt
           bash packaging/check-no-roms.sh zip-files.txt
+      - name: Clean-machine test - the packaged exe must NOT find any ROM
+        shell: pwsh
+        run: |
+          Expand-Archive DigDug-windows-x64.zip -DestinationPath pkgtest
+          $p = Start-Process pkgtest/DigDug.exe -ArgumentList '--rom-status' -WorkingDirectory pkgtest -Wait -PassThru -RedirectStandardOutput status.txt
+          Get-Content status.txt
+          if ($p.ExitCode -ne 3) { throw "Packaged exe found a ROM set on a clean machine (exit code $($p.ExitCode))" }
       - uses: actions/upload-artifact@v4
         with:
           name: DigDug-windows-x64
@@ -51,6 +58,13 @@ jobs:
           bash packaging/check-no-roms.sh repo-files.txt
           cd out && ./DigDug-x86_64.AppImage --appimage-extract > /dev/null && find squashfs-root -type f > ../appimage-files.txt && cd ..
           bash packaging/check-no-roms.sh appimage-files.txt
+      - name: Clean-machine test - the AppImage must NOT find any ROM
+        run: |
+          set +e
+          ./out/DigDug-x86_64.AppImage --appimage-extract-and-run --rom-status
+          code=$?
+          echo "exit code: $code"
+          test "$code" -eq 3
       - uses: actions/upload-artifact@v4
         with:
           name: DigDug-linux-x86_64

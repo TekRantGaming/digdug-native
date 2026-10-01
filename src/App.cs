@@ -59,6 +59,7 @@ namespace DigDug
                 return 1;
             }
             ev = Marshal.AllocHGlobal(64);
+            foreach (var line in Program.StartupLog) Log(line);
             ConfigureShot(opts);
 
             int sw0 = W * 3, sh0 = H * 3;
@@ -571,6 +572,7 @@ namespace DigDug
             {
                 var roms = RomSet.Load(path);
                 cfg.RomPath = path; cfg.Save();
+                Program.RomSource = path;
                 romError = null;
                 StartMachine(roms, null);
             }
@@ -804,6 +806,13 @@ namespace DigDug
             }
             string hint = screen == Screen.Main ? "ARROWS AND ENTER OR PAD" : "LEFT RIGHT TO CHANGE";
             Text(hint, (W - hint.Length * 8) / 2, 268, unchecked((int)0xff80ff80));
+            if (screen == Screen.Main)
+            {
+                // always show where the game data came from (the program itself contains none)
+                string src = Program.RomSource ?? "";
+                if (src.Length > 33) src = "..." + src.Substring(src.Length - 30);
+                Font5x7.Draw(frameBuf, W, H, "ROMS " + src, 2, 280, unchecked((int)0xff9098c0), 1);
+            }
         }
 
         void Marker(int x, int y, int color)

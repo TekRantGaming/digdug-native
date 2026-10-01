@@ -202,6 +202,8 @@ GitHub Actions builds both packages on every push, and a tag starting with `v` p
 **It asks for ROMs / says the ROM set is incomplete.** See [Getting the ROMs](#getting-the-roms). Make sure it is the
 `digdug` set (not `digdugat` or `digduga1`) and that all files listed are present.
 
+**The game started without asking for a ROM - where did it get one?** The program contains no game data; it can only use a ROM set it found on your PC. The menu's bottom line ("ROMS ...") and `digdug.log` say exactly where it was loaded from, and `DigDug.exe --rom-status` prints the same (exit code 3 = none found). The usual cause is a remembered path in `settings.ini` (delete it to forget) or a ROM set next to the program or in the config folder.
+
 **No sound.** Open the menu -> Options -> **Audio** and choose another output device; a test tone plays each time you
 change it. Systems with virtual mixers (for example SteelSeries Sonar or Voicemeeter) can send new programs to a channel
 you aren't listening to. `digdug.log` lists every output device SDL can see.

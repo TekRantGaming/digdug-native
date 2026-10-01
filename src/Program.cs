@@ -19,7 +19,10 @@ namespace DigDug
             "  --dip0 <hex> --dip1 <hex>   raw DIP switch bytes (advanced)\n\n" +
             "Developer options: --disasm --dumpgfx --makeicon --frames N (see docs/DEVELOPMENT.md)\n";
 
-        static readonly string[] DevFlags = { "disasm", "dumpgfx", "frames", "makeicon", "help", "padtest" };
+        public static readonly List<string> StartupLog = new List<string>();
+        public static string RomSource;     // where the ROM set was loaded from (also shown in the menu)
+
+        static readonly string[] DevFlags = { "disasm", "dumpgfx", "frames", "makeicon", "help", "padtest", "rom-status" };
 
         [STAThread]
         static int Main(string[] args)
@@ -50,10 +53,20 @@ namespace DigDug
 
             var cfg = Settings.Load();
             RomSet roms = null;
+            StartupLog.Add("exe folder: " + AppContext.BaseDirectory + "; working folder: " + Directory.GetCurrentDirectory() + "; config folder: " + Settings.ConfigDir);
+            StartupLog.Add("remembered ROM path in settings: '" + cfg.RomPath + "'");
             foreach (var cand in Candidates(romPath, cfg))
             {
-                try { roms = RomSet.Load(cand); if (Path.IsPathRooted(cand)) cfg.RomPath = cand; break; }
-                catch (Exception ex) { Console.Error.WriteLine("Skipping " + cand + ": " + ex.Message); }
+                try { roms = RomSet.Load(cand); StartupLog.Add("ROM set LOADED from: " + cand); RomSource = cand; if (Path.IsPathRooted(cand)) cfg.RomPath = cand; break; }
+                catch (Exception ex) { StartupLog.Add("candidate rejected: " + cand + " (" + ex.Message + ")"); Console.Error.WriteLine("Skipping " + cand + ": " + ex.Message); }
+            }
+            if (roms == null) StartupLog.Add("no ROM set found");
+
+            if (opts.ContainsKey("rom-status"))
+            {
+                foreach (var line in StartupLog) Console.WriteLine(line);
+                Console.WriteLine(roms != null ? "ROM-STATUS: FOUND at " + RomSource : "ROM-STATUS: NOT FOUND");
+                return roms != null ? 0 : 3;
             }
 
             if (dev)
@@ -127,7 +140,8 @@ namespace DigDug
             if (!string.IsNullOrEmpty(given)) list.Add(given);
             if (!string.IsNullOrEmpty(cfg.RomPath)) list.Add(cfg.RomPath);
             string exeDir = AppContext.BaseDirectory;
-            var roots = new List<string> { exeDir, Path.Combine(exeDir, ".."), Path.Combine(exeDir, "..", ".."), Settings.ConfigDir, Directory.GetCurrentDirectory() };
+            // only the documented places: next to the program (or the .AppImage) and the per-user config folder
+            var roots = new List<string> { exeDir, Settings.ConfigDir };
             string appImage = Environment.GetEnvironmentVariable("APPIMAGE");   // folder containing the .AppImage file
             if (!string.IsNullOrEmpty(appImage)) roots.Insert(0, Path.GetDirectoryName(appImage));
             foreach (var root in roots)
