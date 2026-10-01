@@ -1,0 +1,24 @@
+# Game data is copyrighted and must never be committed
+roms/*
+!roms/README.md
+*.zip
+*.rom
+*.bin
+
+# Build output and developer dumps (disassemblies are derived from the ROMs)
+bin/
+obj/
+out/
+dist/
+*.asm
+*.nv
+*.wav
+*.exe
+*.dll
+*.pdb
+*.AppImage
+
+# Editors / OS
+.vs/
+.vscode/
+Thumbs.db

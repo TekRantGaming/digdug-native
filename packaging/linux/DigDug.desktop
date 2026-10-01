@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Dig Dug
+Comment=Native port of the 1982 arcade game (requires your own ROM files)
+Exec=DigDug
+Icon=digdug
+Categories=Game;ArcadeGame;
+Terminal=false

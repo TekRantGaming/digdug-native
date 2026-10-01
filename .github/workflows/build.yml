@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item README.md,LICENSE out/win/
+          Compress-Archive -Path out/win/* -DestinationPath DigDug-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DigDug-windows-x64
+          path: DigDug-windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install SDL2 runtime
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-2.0-0 wget
+      - name: Build AppImage
+        run: bash ./packaging/linux/build-appimage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DigDug-linux-x86_64
+          path: out/DigDug-x86_64.AppImage
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ windows, linux ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DigDug-windows-x64/DigDug-windows-x64.zip
+            dist/DigDug-linux-x86_64/DigDug-x86_64.AppImage
