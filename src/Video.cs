@@ -103,6 +103,8 @@ namespace DigDug
                         }
                 }
 
+            if (WantPfOnly) Array.Copy(native, pfSnap, native.Length);
+
             // --- text layer (also carries the tunnel shapes)
             for (int row = 0; row < 28; row++)
                 for (int col = 0; col < 36; col++)
@@ -125,7 +127,16 @@ namespace DigDug
             for (int y = 0; y < NativeH; y++)
                 for (int x = 0; x < NativeW; x++)
                     Pixels[x * OutW + (NativeH - 1 - y)] = native[y * NativeW + x];
+            if (WantPfOnly)
+                for (int y = 0; y < NativeH; y++)
+                    for (int x = 0; x < NativeW; x++)
+                        PfOnly[x * OutW + (NativeH - 1 - y)] = pfSnap[y * NativeW + x];
         }
+
+        // Playfield (dirt/sky) without tunnels, text or sprites - used by the widescreen mode to extend the level sideways.
+        public bool WantPfOnly;
+        public readonly int[] PfOnly = new int[OutW * OutH];
+        readonly int[] pfSnap = new int[NativeW * NativeH];
 
         void FillTile(int px, int py, int c)
         {
@@ -141,7 +152,8 @@ namespace DigDug
             {
                 int sprite = ram[o1 + offs];
                 int color = ram[o1 + offs + 1] & 0x3f;
-                int sx = ram[o2 + offs + 1] - 40 + 0x100 * (ram[o3 + offs + 1] & 3);
+                // the 8-bit position wraps (x_ram 0..39 -> 216..255); the high bit(s) add 256 per step
+                int sx = ((ram[o2 + offs + 1] - 40) & 0xff) + 0x100 * (ram[o3 + offs + 1] & 3);
                 int sy = 256 - ram[o2 + offs] + 1;
                 int flipx = ram[o3 + offs] & 1;
                 int flipy = (ram[o3 + offs] >> 1) & 1;

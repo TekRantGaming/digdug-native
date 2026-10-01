@@ -17,6 +17,8 @@ namespace DigDug
         public int Rank;                 // 0..3 = A..D
         public string RomPath = "";
         public string AudioDevice = "";  // empty = system default
+        public bool Widescreen = true;   // fill the side areas of wide windows/fullscreen with an extension of the dirt
+        public bool AutoPump = true;     // holding fire re-presses automatically so the pump keeps inflating
         public bool AutoCoin = true;     // pressing Start with no credit inserts one automatically
 
         public static readonly int[] BonusValues = { 4, 2, 6, 1, 0 };
@@ -60,6 +62,8 @@ namespace DigDug
                         case "rom_path": s.RomPath = v; break;
                         case "audio_device": s.AudioDevice = v; break;
                         case "auto_coin": s.AutoCoin = n != 0; break;
+                        case "widescreen": s.Widescreen = n != 0; break;
+                        case "auto_pump": s.AutoPump = n != 0; break;
                     }
                 }
             }
@@ -74,7 +78,7 @@ namespace DigDug
                 var l = new List<string>
                 {
                     "fullscreen=" + (Fullscreen ? 1 : 0), "window_scale=" + WindowScale, "integer_scale=" + (IntegerScale ? 1 : 0),
-                    "smooth=" + (Smooth ? 1 : 0), "volume=" + Volume, "lives=" + Lives, "bonus=" + Bonus, "rank=" + Rank, "rom_path=" + RomPath, "audio_device=" + AudioDevice, "auto_coin=" + (AutoCoin ? 1 : 0)
+                    "smooth=" + (Smooth ? 1 : 0), "volume=" + Volume, "lives=" + Lives, "bonus=" + Bonus, "rank=" + Rank, "rom_path=" + RomPath, "audio_device=" + AudioDevice, "auto_coin=" + (AutoCoin ? 1 : 0), "widescreen=" + (Widescreen ? 1 : 0), "auto_pump=" + (AutoPump ? 1 : 0)
                 };
                 File.WriteAllLines(FilePath, l.ToArray());
             }

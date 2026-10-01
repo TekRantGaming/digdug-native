@@ -194,6 +194,10 @@ namespace DigDug
             var events = new List<string[]>();
             foreach (var s in scripted) events.Add(s.Split(':'));
 
+            Bot bot = o.ContainsKey("bot") ? new Bot(m) : null;
+            if (bot != null && o.ContainsKey("botidle")) bot.IdleWhenOne = true;
+            int botStart = o.ContainsKey("bot") ? int.Parse(o["bot"]) : 0;
+            int botLog = o.ContainsKey("botlog") ? int.Parse(o["botlog"]) : 300;
             var sprStats = new SortedDictionary<string, int>();
             var wavMs = o.ContainsKey("wav") ? new MemoryStream() : null;
             var abuf = new short[800];
@@ -219,6 +223,15 @@ namespace DigDug
                         case "left": inp.Dir = 6; break;
                     }
                 }
+                if (bot != null && f >= botStart)
+                {
+                    bot.Step(inp, f);
+                    if (f % botLog == 0)
+                    {
+                        string st = ScreenText(m); var mm = System.Text.RegularExpressions.Regex.Match(st, @"(\d+)\s+10000"); var rr = System.Text.RegularExpressions.Regex.Match(st, @"ROUND\s+(\d+)");
+                        Console.WriteLine("bot f" + f + " score=" + mm.Groups[1].Value + " round=" + rr.Groups[1].Value + " " + bot.LastNote);
+                    }
+                }
                 if (o.ContainsKey("cov"))
                 {
                     var cr = o["cov"].Split('-');
@@ -228,6 +241,8 @@ namespace DigDug
                 }
                 m.RunFrame();
                 if (wavMs != null) { m.Sound.Mix(abuf, 0, 792); for (int k = 0; k < 792; k++) { wavMs.WriteByte((byte)abuf[k]); wavMs.WriteByte((byte)(abuf[k] >> 8)); } }
+                if (o.ContainsKey("trace8970") && f >= int.Parse(o["trace8970"].Split('-')[0]) && f <= int.Parse(o["trace8970"].Split('-')[1]))
+                    Console.WriteLine("f" + f + " 8970=" + m.Ram[0x970].ToString("x2") + " 8657=" + m.Ram[0x657].ToString("x2") + " 8401=" + m.Ram[0x401].ToString("x2") + " 8403=" + m.Ram[0x403].ToString("x2") + " 8404=" + m.Ram[0x404].ToString("x2") + " 85b0=" + m.Ram[0x5b0].ToString("x2"));
                 if (o.ContainsKey("pcs") && f % int.Parse(o["pcs"]) == 0)
                     Console.WriteLine("f" + f + " PC " + m.Cpu[0].PC.ToString("x4") + " " + m.Cpu[1].PC.ToString("x4") + " " + m.Cpu[2].PC.ToString("x4")
                         + " cnt=" + (m.Ram[0x423] | m.Ram[0x424] << 8).ToString("x4") + " 8400=" + m.Ram[0x400].ToString("x2") + " " + m.Ram[0x401].ToString("x2") + " " + m.Ram[0x402].ToString("x2")

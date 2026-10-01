@@ -31,6 +31,7 @@ namespace DigDug
 
         // input state
         readonly bool[] prevDir = new bool[4];
+        int fireHeldFrames;
         int lastDir = -1;
 
         // menu
@@ -112,6 +113,7 @@ namespace DigDug
             machine.LoadEarom(Settings.NvPath);
             cfg.ApplyTo(machine);
             machine.Chip51.AutoCoin = cfg.AutoCoin;
+            machine.Video.WantPfOnly = cfg.Widescreen;
             if (opts != null) Program.ApplyDipOptions(machine, opts);
             menuOpen = true; menuPausesGame = false; screen = Screen.Main; sel = 0;
             Sdl.SDL_SetWindowTitle(win, "Dig Dug");
@@ -121,8 +123,38 @@ namespace DigDug
         {
             if (tex != IntPtr.Zero) Sdl.SDL_DestroyTexture(tex);
             Sdl.SDL_SetHint("SDL_RENDER_SCALE_QUALITY", cfg.Smooth ? "linear" : "nearest");
-            tex = Sdl.SDL_CreateTexture(ren, Sdl.PixelFormatArgb8888, Sdl.TextureAccessStreaming, W, H);
+            tex = Sdl.SDL_CreateTexture(ren, Sdl.PixelFormatArgb8888, Sdl.TextureAccessStreaming, texW, H);
         }
+
+
+        // Builds the widescreen frame: the 224x288 game in the middle, dimmed mirrored dirt on either side, bright frame line at the playfield edge.
+        int[] ComposeWide(int[] src, int tw)
+        {
+            if (wideBuf.Length != tw * H) wideBuf = new int[tw * H];
+            int[] pf = machine.Video.PfOnly;
+            int x0 = (tw - W) / 2;
+            for (int y = 0; y < H; y++)
+            {
+                int row = y * tw;
+                for (int x = 0; x < tw; x++)
+                {
+                    int cx = x - x0;
+                    if (cx >= 0 && cx < W) { wideBuf[row + x] = src[y * W + cx]; continue; }
+                    int dd = cx < 0 ? -cx - 1 : cx - W;
+                    int mm = dd % (2 * W); int off = mm < W ? mm : 2 * W - 1 - mm;
+                    int col = cx < 0 ? off : W - 1 - off;
+                    int c = pf[y * W + col];
+                    int v = (int)(0xff000000 | (uint)((c >> 1) & 0x7f7f7f));
+                    if (y >= 264) v = unchecked((int)0xff000000);               // keep the status strip (lives icons) out of the extension
+                    if (dd == 0) v = unchecked((int)0xffd0d0d0);
+                    else if (dd == 1) v = unchecked((int)0xff000000);
+                    wideBuf[row + x] = v;
+                }
+            }
+            return wideBuf;
+        }
+        int texW = W;
+        int[] wideBuf = new int[0];
 
         void OpenAudio()
         {
@@ -200,7 +232,8 @@ namespace DigDug
                 machine.Video.Render();
                 if (shotFrame > 0 && machine.FrameCount >= shotFrame)
                 {
-                    Png.Write(shotFile, machine.Video.Pixels, W, H, 2);
+                    if (shotWide > W) { machine.Video.WantPfOnly = true; machine.Video.Render(); Png.Write(shotFile, ComposeWide(machine.Video.Pixels, shotWide), shotWide, H, 2); }
+                    else Png.Write(shotFile, machine.Video.Pixels, W, H, 2);
                     Log("saved frame " + machine.FrameCount + " to " + shotFile);
                     shotFrame = 0; if (shotQuit) running = false;
                 }
@@ -237,13 +270,14 @@ namespace DigDug
         }
 
         // automated tests: --shot-at <frame> --shot-file <png> [--shot-quit]
-        long shotFrame; string shotFile; bool shotQuit;
+        long shotFrame; string shotFile; bool shotQuit; int shotWide;
         void ConfigureShot(Dictionary<string, string> o)
         {
             string v;
             if (o != null && o.TryGetValue("shot-at", out v)) long.TryParse(v, out shotFrame);
             if (o != null && o.TryGetValue("shot-file", out v)) shotFile = v;
             shotQuit = o != null && o.ContainsKey("shot-quit");
+            if (o != null && o.TryGetValue("shot-wide", out v)) int.TryParse(v, out shotWide);
             if (shotFile == null) shotFrame = 0;
         }
 
@@ -286,19 +320,27 @@ namespace DigDug
                 DrawMenu();
                 src = frameBuf;
             }
-            fixed (int* p = src) Sdl.SDL_UpdateTexture(tex, IntPtr.Zero, (IntPtr)p, W * 4);
-
             int ow, oh; Sdl.SDL_GetRendererOutputSize(ren, out ow, out oh);
+
+            // widescreen: extend the level sideways (dimmed, mirrored dirt) so wide screens aren't left with black bars;
+            // a bright frame marks the real 224x288 playfield so nobody tries to walk into the extension.
+            int tw = W;
+            double ratio = oh > 0 ? (double)ow / oh : 0;
+            if (cfg.Widescreen && ratio > (double)W / H + 0.02) { tw = Math.Min(1280, (int)Math.Ceiling(H * ratio)); tw += tw & 1; if (tw < W) tw = W; }
+            if (tw != texW) { texW = tw; MakeTexture(); }
+            if (tw > W) src = ComposeWide(src, tw);
+            fixed (int* p = src) Sdl.SDL_UpdateTexture(tex, IntPtr.Zero, (IntPtr)p, tw * 4);
+
             SdlRect dst;
-            if (cfg.IntegerScale && ow >= W && oh >= H)
+            if (cfg.IntegerScale && ow >= tw && oh >= H)
             {
-                int s = Math.Max(1, Math.Min(ow / W, oh / H));
-                dst = new SdlRect { W = W * s, H = H * s };
+                int s = Math.Max(1, Math.Min(ow / tw, oh / H));
+                dst = new SdlRect { W = tw * s, H = H * s };
             }
             else
             {
-                double s = Math.Min((double)ow / W, (double)oh / H);
-                dst = new SdlRect { W = (int)(W * s), H = (int)(H * s) };
+                double s = Math.Min((double)ow / tw, (double)oh / H);
+                dst = new SdlRect { W = (int)(tw * s), H = (int)(H * s) };
             }
             dst.X = (ow - dst.W) / 2; dst.Y = (oh - dst.H) / 2;
             Sdl.SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
@@ -338,6 +380,15 @@ namespace DigDug
                     else { if (ay < 0) d[0] = true; else d[2] = true; }
                 }
             }
+
+            // Auto pump: the game inflates one step per release-and-re-press, so a steadily held button never inflates.
+            // While fire is held, let go for a few frames every half second so holding the button keeps pumping.
+            if (cfg.AutoPump && fire)
+            {
+                fireHeldFrames++;
+                if (fireHeldFrames % 32 >= 28) fire = false;
+            }
+            else if (!fire) fireHeldFrames = 0;
 
             // 4-way stick: the most recently pressed direction wins
             for (int k = 0; k < 4; k++) if (d[k] && !prevDir[k]) lastDir = k;
@@ -505,7 +556,7 @@ namespace DigDug
         void OpenMenu() { menuOpen = true; menuPausesGame = true; screen = Screen.Main; sel = 0; }
         void CloseMenu() { menuOpen = false; cfg.Save(); }
 
-        const int OptionCount = 12;
+        const int OptionCount = 14;
         int ItemCount { get { return screen == Screen.Main ? 5 : screen == Screen.Options ? OptionCount : 1; } }
         void MenuMove(int d) { sel = (sel + d + ItemCount) % ItemCount; }
 
@@ -602,6 +653,8 @@ namespace DigDug
                 case 8: { int i = (Array.IndexOf(Settings.BonusValues, cfg.Bonus) + d + 5) % 5; cfg.Bonus = Settings.BonusValues[i]; cfg.ApplyTo(machine); break; }
                 case 9: cfg.Rank = (cfg.Rank + d + 4) % 4; cfg.ApplyTo(machine); break;
                 case 10: cfg.AutoCoin = !cfg.AutoCoin; machine.Chip51.AutoCoin = cfg.AutoCoin; break;
+                case 11: cfg.AutoPump = !cfg.AutoPump; break;
+                case 12: cfg.Widescreen = !cfg.Widescreen; machine.Video.WantPfOnly = cfg.Widescreen; break;
             }
         }
 
@@ -641,7 +694,8 @@ namespace DigDug
                     "SCALING " + (cfg.IntegerScale ? "SHARP" : "FIT"), "FILTER " + (cfg.Smooth ? "SMOOTH" : "PIXELS"),
                     "VOLUME " + cfg.Volume, "AUDIO " + AudioLabel(), "TEST SOUND", "LIVES " + cfg.Lives,
                     "BONUS " + Settings.BonusNames[Array.IndexOf(Settings.BonusValues, cfg.Bonus)],
-                    "RANK " + (char)('A' + cfg.Rank), "AUTO COIN " + (cfg.AutoCoin ? "ON" : "OFF"), "BACK"
+                    "RANK " + (char)('A' + cfg.Rank), "AUTO COIN " + (cfg.AutoCoin ? "ON" : "OFF"),
+                    "AUTO PUMP " + (cfg.AutoPump ? "ON" : "OFF"), "WIDESCREEN " + (cfg.Widescreen ? "ON" : "OFF"), "BACK"
                 };
             }
             return new string[0];
@@ -670,7 +724,7 @@ namespace DigDug
                 int col = on ? unchecked((int)0xffffff40) : unchecked((int)0xffe0e0ff);
                 bool opt = screen == Screen.Options && i < OptionCount - 1;
                 int x = opt ? 16 : (W - lines[i].Length * 8) / 2;
-                int y = screen == Screen.Options ? 52 + i * 16 : 72 + i * 18;
+                int y = screen == Screen.Options ? 46 + i * 15 : 72 + i * 18;
                 Text(lines[i], x, y, col);
                 if (on) Marker(opt ? 4 : x - 12, y, col);
             }

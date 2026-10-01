@@ -15,6 +15,8 @@ native game-controller support.
   and most other gamepads, with hot-plugging – via SDL's game-controller database
 * **In-game menu** (Esc, or the PS / Guide button): fullscreen, window size, sharp or smooth scaling, volume,
   **audio output device picker + test sound**, lives, bonus-life thresholds, difficulty rank, auto-coin, reset
+* **Widescreen mode**: on 16:9 and other wide screens the dirt is extended (dimmed) to fill the sides, with a bright frame marking the real playfield edge. Toggle in Options.
+* **Auto pump**: hold the fire button and the pump keeps inflating (the arcade game needs release-and-press per pump step)
 * Windows `.exe` and Linux **AppImage**; fast-forward (hold Tab); pause; persistent settings and high scores
 * The ~30-second power-on self-test is fast-forwarded automatically
 

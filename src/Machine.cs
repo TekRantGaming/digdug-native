@@ -287,7 +287,7 @@ namespace DigDug
             int dir = i.Dir < 0 ? 8 : i.Dir;
             int b = dir;
             if (!fireEdge) b |= 0x10;              // bit4: 0 for one poll on a fresh press
-            if (fireHeld) b |= 0x20;               // bit5: button held
+            if (fireHeld && !fireEdge) b |= 0x20;  // bit5: button held (clear on the press frame itself, as in the game's own demo data)
             return b;
         }
 
