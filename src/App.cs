@@ -810,7 +810,7 @@ namespace DigDug
             {
                 // always show where the game data came from (the program itself contains none)
                 string src = Program.RomSource ?? "";
-                if (src.Length > 33) src = "..." + src.Substring(src.Length - 30);
+                if (src.Length > 31) src = "..." + src.Substring(src.Length - 28);
                 Font5x7.Draw(frameBuf, W, H, "ROMS " + src, 2, 280, unchecked((int)0xff9098c0), 1);
             }
         }
