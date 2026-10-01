@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Fixed drag-and-drop of the ROM zip: the start-up ROM prompt no longer uses a blocking dialog. An on-screen page (with a built-in font) is shown instead, the file picker runs on a background thread, and bad drops show an error on the page
+- Dropping loose ROM files from an extracted set now works (their folder is used)
+
 ## 1.0.1
 
 - Added an AI disclosure (AI-DISCLOSURE.md, README banner)
